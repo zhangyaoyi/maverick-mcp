@@ -4,7 +4,7 @@ services:
     ports:
       - "8003:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_HOST=redis
       # Required API Keys
       - TIINGO_API_KEY=${TIINGO_API_KEY}

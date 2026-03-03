@@ -18,7 +18,7 @@ services:
       # Server Configuration
       - API_HOST=0.0.0.0
       - API_PORT=8000
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - ENVIRONMENT=${ENVIRONMENT:-production}
     volumes:
       - ./maverick_mcp:/app/maverick_mcp

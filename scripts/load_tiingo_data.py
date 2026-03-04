@@ -56,7 +56,11 @@ DEFAULT_TIMEOUT = int(os.getenv("TIINGO_TIMEOUT", "30"))  # 增加到30秒，应
 
 # Proxy configuration - aiohttp does not auto-read system proxies unlike `requests`
 # Reads HTTPS_PROXY first, falling back to HTTP_PROXY
-DEFAULT_PROXY = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+_raw_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+# aiohttp requires a full URL with scheme (e.g. http://127.0.0.1:7890, not just 127.0.0.1:7890)
+if _raw_proxy and not _raw_proxy.startswith(("http://", "https://", "socks5://")):
+    _raw_proxy = f"http://{_raw_proxy}"
+DEFAULT_PROXY = _raw_proxy or None
 
 
 class TiingoDataLoader:

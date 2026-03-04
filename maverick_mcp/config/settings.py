@@ -134,6 +134,10 @@ class ResearchSettings(BaseModel):
         default_factory=lambda: os.getenv("EXA_API_KEY"),
         description="Exa API key for web search",
     )
+    tavily_api_key: str | None = Field(
+        default_factory=lambda: os.getenv("TAVILY_API_KEY"),
+        description="Tavily API key for web search (primary provider)",
+    )
 
     # Research parameters
     default_max_sources: int = Field(
@@ -182,7 +186,7 @@ class ResearchSettings(BaseModel):
     @property
     def api_keys(self) -> dict[str, str | None]:
         """Get API keys as dictionary."""
-        return {"exa_api_key": self.exa_api_key}
+        return {"exa_api_key": self.exa_api_key, "tavily_api_key": self.tavily_api_key}
 
 
 class DataLimitsConfig(BaseModel):

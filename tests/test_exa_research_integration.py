@@ -11,7 +11,11 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from exa_py import Exa
+
+try:
+    from exa_py import Exa  # type: ignore[import-not-found]
+except ImportError:
+    Exa = None  # type: ignore[assignment,misc]
 
 from maverick_mcp.agents.deep_research import (
     RESEARCH_DEPTH_LEVELS,

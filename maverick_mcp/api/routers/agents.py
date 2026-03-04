@@ -64,12 +64,14 @@ def get_or_create_agent(agent_type: str, persona: str = "moderate") -> Any:
         elif agent_type == "deep_research":
             # Get web search API keys from environment
             exa_api_key = os.getenv("EXA_API_KEY")
+            tavily_api_key = os.getenv("TAVILY_API_KEY")
 
             agent = DeepResearchAgent(
                 llm=llm,
                 persona=persona,
                 ttl_hours=1,
                 exa_api_key=exa_api_key,
+                tavily_api_key=tavily_api_key,
             )
             # Mark for initialization - will be initialized on first use
             agent._needs_initialization = True

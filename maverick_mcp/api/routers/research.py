@@ -112,6 +112,7 @@ def get_research_agent(
             max_sources=max_sources,
             research_depth=research_scope,
             exa_api_key=settings.research.exa_api_key,
+            tavily_api_key=settings.research.tavily_api_key,
         )
         # Mark for initialization - will be initialized on first use
         agent._needs_initialization = True
@@ -125,6 +126,7 @@ def get_research_agent(
             max_sources=25,  # Reduced for faster execution
             research_depth="standard",  # Reduced depth for speed
             exa_api_key=settings.research.exa_api_key,
+            tavily_api_key=settings.research.tavily_api_key,
         )
         # Mark for initialization - will be initialized on first use
         research_agent._needs_initialization = True
@@ -565,15 +567,17 @@ async def comprehensive_research(
 
         # Check for API key before creating agent (faster failure)
         exa_available = bool(settings.research.exa_api_key)
+        tavily_available = bool(settings.research.tavily_api_key)
 
-        if not exa_available:
+        if not exa_available and not tavily_available:
             return {
                 "success": False,
-                "error": "Research functionality unavailable - Exa search provider not configured",
+                "error": "Research functionality unavailable - no search provider configured",
                 "details": {
-                    "required_configuration": "Exa search provider API key is required",
-                    "exa_api_key": "Missing (configure EXA_API_KEY environment variable)",
-                    "setup_instructions": "Get a free API key from: Exa (exa.ai)",
+                    "required_configuration": "At least one search provider API key is required",
+                    "tavily_api_key": "Missing (configure TAVILY_API_KEY environment variable) - primary provider",
+                    "exa_api_key": "Missing (configure EXA_API_KEY environment variable) - fallback provider",
+                    "setup_instructions": "Get a free API key from: Tavily (tavily.com) or Exa (exa.ai)",
                 },
                 "query": query,
                 "request_id": request_id,
@@ -581,9 +585,10 @@ async def comprehensive_research(
             }
 
         # Log available provider
+        active_provider = "Tavily" if tavily_available else "Exa"
         tool_logger.step(
             "provider_available",
-            "Exa search provider available",
+            f"{active_provider} search provider available",
         )
 
         session_id = f"enhanced_research_{datetime.now().timestamp()}"

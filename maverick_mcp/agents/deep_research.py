@@ -52,27 +52,39 @@ settings = get_settings()
 _search_provider_cache: dict[str, Any] = {}
 
 
-async def get_cached_search_provider(exa_api_key: str | None = None) -> Any | None:
-    """Get cached Exa search provider to avoid repeated initialization delays."""
-    cache_key = f"exa:{exa_api_key is not None}"
+async def get_cached_search_provider(
+    exa_api_key: str | None = None,
+    tavily_api_key: str | None = None,
+) -> Any | None:
+    """Get cached search provider to avoid repeated initialization delays.
 
-    if cache_key in _search_provider_cache:
+    Prefers Tavily (primary) over Exa when both keys are available.
+    """
+    # Tavily is the primary provider
+    if tavily_api_key:
+        cache_key = f"tavily:{True}"
+        if cache_key not in _search_provider_cache:
+            logger.info("Initializing Tavily search provider")
+            provider = TavilySearchProvider(tavily_api_key)
+            _search_provider_cache[cache_key] = provider
+            logger.info("Initialized Tavily search provider")
         return _search_provider_cache[cache_key]
 
-    logger.info("Initializing Exa search provider")
-    provider = None
-
-    # Initialize Exa provider with caching
+    # Fall back to Exa if available
     if exa_api_key:
-        try:
-            provider = ExaSearchProvider(exa_api_key)
-            logger.info("Initialized Exa search provider")
-            # Cache the provider
-            _search_provider_cache[cache_key] = provider
-        except ImportError as e:
-            logger.warning(f"Failed to initialize Exa provider: {e}")
+        cache_key = f"exa:{True}"
+        if cache_key not in _search_provider_cache:
+            logger.info("Initializing Exa search provider")
+            try:
+                provider = ExaSearchProvider(exa_api_key)
+                logger.info("Initialized Exa search provider")
+                _search_provider_cache[cache_key] = provider
+            except ImportError as e:
+                logger.warning(f"Failed to initialize Exa provider: {e}")
+                return None
+        return _search_provider_cache.get(cache_key)
 
-    return provider
+    return None
 
 
 # Research depth levels optimized for quick searches
@@ -775,7 +787,7 @@ class TavilySearchProvider(WebSearchProvider):
             )
             return self._process_results(response.get("results", []))
 
-        return await circuit_breaker.call(_search, timeout=timeout)
+        return await asyncio.wait_for(circuit_breaker.call(_search), timeout=timeout)
 
     def _process_results(
         self, results: Iterable[dict[str, Any]]
@@ -808,11 +820,10 @@ class ContentAnalyzer:
 
     @staticmethod
     def _coerce_message_content(raw_content: Any) -> str:
-        """Convert LLM response content to a string for JSON parsing."""
+        """Convert LLM response content to a string, stripping markdown code fences."""
         if isinstance(raw_content, str):
-            return raw_content
-
-        if isinstance(raw_content, list):
+            text = raw_content
+        elif isinstance(raw_content, list):
             parts: list[str] = []
             for item in raw_content:
                 if isinstance(item, dict):
@@ -823,9 +834,24 @@ class ContentAnalyzer:
                         parts.append(str(text_value))
                 else:
                     parts.append(str(item))
-            return "".join(parts)
+            text = "".join(parts)
+        else:
+            text = str(raw_content)
 
-        return str(raw_content)
+        # Strip markdown code fences that models like DeepSeek R1 add around JSON
+        # e.g. ```json\n{...}\n``` or ```\n{...}\n```
+        stripped = text.strip()
+        if stripped.startswith("```"):
+            # Remove opening fence (```json or ```)
+            first_newline = stripped.find("\n")
+            if first_newline != -1:
+                stripped = stripped[first_newline + 1:]
+            # Remove closing fence
+            if stripped.endswith("```"):
+                stripped = stripped[: stripped.rfind("```")]
+            text = stripped.strip()
+
+        return text
 
     async def analyze_content(
         self, content: str, persona: str, analysis_focus: str = "general"
@@ -1208,6 +1234,7 @@ class DeepResearchAgent(PersonaAwareAgent):
         checkpointer: MemorySaver | None = None,
         ttl_hours: int = 24,  # Research results cached longer
         exa_api_key: str | None = None,
+        tavily_api_key: str | None = None,
         default_depth: str = "standard",
         max_sources: int | None = None,
         research_depth: str | None = None,
@@ -1223,8 +1250,9 @@ class DeepResearchAgent(PersonaAwareAgent):
             TaskDistributionEngine,
         )
 
-        # Store API key for immediate loading of search provider (pre-initialization)
+        # Store API keys for immediate loading of search provider (pre-initialization)
         self._exa_api_key = exa_api_key
+        self._tavily_api_key = tavily_api_key
         self._search_providers_loaded = False
         self.search_providers = []
 
@@ -1278,25 +1306,30 @@ class DeepResearchAgent(PersonaAwareAgent):
         return True  # Default permissive approach as mentioned in test comments
 
     async def initialize(self) -> None:
-        """Pre-initialize Exa search provider to eliminate lazy loading overhead during research."""
+        """Pre-initialize search provider to eliminate lazy loading overhead during research."""
         if not self._initialization_pending:
             return
 
         try:
-            provider = await get_cached_search_provider(self._exa_api_key)
+            provider = await get_cached_search_provider(
+                exa_api_key=self._exa_api_key,
+                tavily_api_key=self._tavily_api_key,
+            )
             self.search_providers = [provider] if provider else []
             self._search_providers_loaded = True
             self._initialization_pending = False
 
             if not self.search_providers:
                 logger.warning(
-                    "Exa search provider not available - research capabilities will be limited"
+                    "No search provider available - research capabilities will be limited"
                 )
+            elif isinstance(self.search_providers[0], TavilySearchProvider):
+                logger.info("Pre-initialized Tavily search provider")
             else:
                 logger.info("Pre-initialized Exa search provider")
 
         except Exception as e:
-            logger.error(f"Failed to pre-initialize Exa search provider: {e}")
+            logger.error(f"Failed to pre-initialize search provider: {e}")
             self.search_providers = []
             self._search_providers_loaded = True
             self._initialization_pending = False
@@ -1526,14 +1559,44 @@ class DeepResearchAgent(PersonaAwareAgent):
         start_time = datetime.now()
         all_results = []
 
-        # Use Exa provider with financial optimization if available
+        # Identify available providers
+        tavily_provider = None
         exa_provider = None
         for p in self.search_providers:
-            if isinstance(p, ExaSearchProvider):
+            if isinstance(p, TavilySearchProvider):
+                tavily_provider = p
+            elif isinstance(p, ExaSearchProvider):
                 exa_provider = p
-                break
 
-        if exa_provider and (provider == "auto" or provider == "exa"):
+        if tavily_provider and (provider == "auto" or provider == "tavily"):
+            try:
+                results = await tavily_provider.search(query, num_results)
+
+                for result in results:
+                    result.update(
+                        {
+                            "search_strategy": strategy,
+                            "search_timestamp": start_time.isoformat(),
+                            "enhanced_query": query,
+                        }
+                    )
+
+                all_results.extend(results)
+
+                logger.info(
+                    f"Financial search completed: {len(results)} results "
+                    f"using Tavily in {(datetime.now() - start_time).total_seconds():.2f}s"
+                )
+
+            except Exception as e:
+                logger.error(f"Tavily financial search failed: {e}")
+                return {
+                    "error": f"Financial search failed: {str(e)}",
+                    "results": [],
+                    "total_results": 0,
+                }
+
+        elif exa_provider and (provider == "auto" or provider == "exa"):
             try:
                 # Use the enhanced financial search method
                 results = await exa_provider.search_financial(
@@ -1569,7 +1632,7 @@ class DeepResearchAgent(PersonaAwareAgent):
                         "total_results": 0,
                     }
         else:
-            # Use regular search providers
+            # Use regular search providers (generic fallback)
             try:
                 for provider_obj in self.search_providers:
                     if (

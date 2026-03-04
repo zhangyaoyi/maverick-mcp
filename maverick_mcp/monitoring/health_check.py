@@ -75,6 +75,7 @@ class HealthChecker:
             "tiingo_api": self._check_tiingo_api_health,
             "openrouter_api": self._check_openrouter_api_health,
             "exa_api": self._check_exa_api_health,
+            "tavily_api": self._check_tavily_api_health,
             "system_resources": self._check_system_resources_health,
         }
 
@@ -364,6 +365,43 @@ class HealthChecker:
                 name="exa_api",
                 status=HealthStatus.UNHEALTHY,
                 message=f"Exa API check failed: {str(e)}",
+                response_time_ms=(time.time() - start_time) * 1000,
+                last_check=datetime.now(UTC),
+            )
+
+    async def _check_tavily_api_health(self) -> ComponentHealth:
+        """Check Tavily API health."""
+        start_time = time.time()
+
+        try:
+            from maverick_mcp.config.settings import get_settings
+
+            settings = get_settings()
+            if not settings.research.tavily_api_key:
+                return ComponentHealth(
+                    name="tavily_api",
+                    status=HealthStatus.UNKNOWN,
+                    message="Tavily API key not configured",
+                    response_time_ms=(time.time() - start_time) * 1000,
+                    last_check=datetime.now(UTC),
+                )
+
+            response_time = (time.time() - start_time) * 1000
+
+            return ComponentHealth(
+                name="tavily_api",
+                status=HealthStatus.HEALTHY,
+                message="Tavily API key configured",
+                response_time_ms=response_time,
+                last_check=datetime.now(UTC),
+                details={"api_key_configured": True},
+            )
+
+        except Exception as e:
+            return ComponentHealth(
+                name="tavily_api",
+                status=HealthStatus.UNHEALTHY,
+                message=f"Tavily API check failed: {str(e)}",
                 response_time_ms=(time.time() - start_time) * 1000,
                 last_check=datetime.now(UTC),
             )

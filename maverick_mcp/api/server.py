@@ -100,18 +100,35 @@ warnings.filterwarnings(
     module="uvicorn.protocols.websockets.*",
 )
 
+# Suppress BeautifulSoup findAll deprecation from third-party libs (e.g. finvizfinance)
+warnings.filterwarnings(
+    "ignore",
+    message=".*findAll.*Deprecated.*",
+    category=DeprecationWarning,
+)
+
 # ruff: noqa: E402 - Imports after warnings config for proper deprecation warning suppression
 import argparse
 import json
 import sys
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+# Fix yfinance TzCache Errno 17 (path conflict in Docker)
+import os as _os
+import yfinance as _yf
+_yf.set_tz_cache_location(_os.environ.get("YFINANCE_CACHE_DIR", "/tmp/yfinance-cache"))
+del _yf, _os
+
+
 from fastapi import FastAPI
 from fastmcp import FastMCP
 from starlette.middleware import Middleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Route
 
 from maverick_mcp.api.middleware.rate_limiting_enhanced import (
@@ -219,11 +236,135 @@ def _patched_create_sse_app(
             flush=True,
         )
 
+    # Add OAuth 2.0 Authorization Server Metadata endpoint
+    # Required by mcp-remote 0.1.x+ which does OAuth discovery per MCP spec.
+    # Returns a minimal valid response so discovery succeeds; no actual auth is enforced.
+    async def oauth_authorization_server_metadata(request: Request) -> JSONResponse:
+        base_url = str(request.base_url).rstrip("/")
+        return JSONResponse(
+            {
+                "issuer": base_url,
+                "authorization_endpoint": f"{base_url}/oauth/authorize",
+                "token_endpoint": f"{base_url}/oauth/token",
+                "registration_endpoint": f"{base_url}/oauth/register",
+                "response_types_supported": ["code"],
+                "grant_types_supported": ["authorization_code"],
+                "code_challenge_methods_supported": ["S256"],
+                "token_endpoint_auth_methods_supported": ["none"],
+            }
+        )
+
+    # /oauth/register — Dynamic Client Registration stub (RFC 7591)
+    # mcp-remote calls this after discovering the metadata endpoint.
+    async def oauth_register(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+            redirect_uris = body.get("redirect_uris", [])
+        except Exception:
+            redirect_uris = []
+        return JSONResponse(
+            {
+                "client_id": "maverick-mcp-client",
+                "client_id_issued_at": 1704067200,
+                "redirect_uris": redirect_uris,
+                "grant_types": ["authorization_code"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "none",
+            },
+            status_code=201,
+        )
+
+    # /oauth/authorize — Auto-bypass: immediately redirect to callback with a fake code.
+    # This avoids any browser interaction for a no-auth personal server.
+    async def oauth_authorize(request: Request) -> JSONResponse:
+        from starlette.responses import RedirectResponse
+
+        redirect_uri = request.query_params.get("redirect_uri", "")
+        state = request.query_params.get("state", "")
+        code = f"maverick-bypass-{uuid.uuid4().hex}"
+        if redirect_uri:
+            sep = "&" if "?" in redirect_uri else "?"
+            return RedirectResponse(
+                url=f"{redirect_uri}{sep}code={code}&state={state}",
+                status_code=302,
+            )
+        return JSONResponse(
+            {"error": "invalid_request", "error_description": "redirect_uri required"},
+            status_code=400,
+        )
+
+    # /oauth/token — Return a static bearer token; FastMCP with no auth accepts all tokens.
+    async def oauth_token(request: Request) -> JSONResponse:
+        return JSONResponse(
+            {
+                "access_token": "maverick-no-auth-token",
+                "token_type": "bearer",
+                "expires_in": 86400,
+            }
+        )
+
+    # Health check endpoints (registered here because mcp.fastapi_app is None at module load time)
+    _health_start_time = time.time()
+
+    async def health_check(request: Request) -> JSONResponse:
+        return JSONResponse({
+            "status": "healthy",
+            "timestamp": time.time(),
+            "version": "1.0.0",
+            "environment": settings.environment,
+            "uptime_seconds": time.time() - _health_start_time,
+        })
+
+    async def health_detailed(request: Request) -> JSONResponse:
+        return JSONResponse({
+            "status": "healthy",
+            "timestamp": time.time(),
+            "version": "1.0.0",
+            "environment": settings.environment,
+            "uptime_seconds": time.time() - _health_start_time,
+            "services": {},
+        })
+
+    async def health_ready(request: Request) -> JSONResponse:
+        return JSONResponse({"status": "ready"})
+
+    async def health_live(request: Request) -> JSONResponse:
+        return JSONResponse({"status": "alive"})
+
+    for path, endpoint, methods in [
+        ("/.well-known/oauth-authorization-server", oauth_authorization_server_metadata, ["GET"]),
+        ("/oauth/register", oauth_register, ["POST"]),
+        ("/oauth/authorize", oauth_authorize, ["GET"]),
+        ("/oauth/token", oauth_token, ["POST"]),
+        ("/health", health_check, ["GET"]),
+        ("/health/detailed", health_detailed, ["GET"]),
+        ("/health/ready", health_ready, ["GET"]),
+        ("/health/live", health_live, ["GET"]),
+    ]:
+        app.router.routes.insert(0, Route(path, endpoint=endpoint, methods=methods))
+
+    print(
+        "✅ Registered OAuth endpoints: /.well-known/oauth-authorization-server, /oauth/register, /oauth/authorize, /oauth/token",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(
+        "✅ Registered health endpoints: /health, /health/detailed, /health/ready, /health/live",
+        file=sys.stderr,
+        flush=True,
+    )
+
     return app
 
 
-# Apply the monkey-patch
+# Apply the monkey-patch to both locations:
+# 1. fastmcp.server.http module (for direct callers)
+# 2. fastmcp.server.server module (where FastMCP.http_app imports and calls it)
 fastmcp_http.create_sse_app = _patched_create_sse_app
+
+import fastmcp.server.server as _fastmcp_server_module  # noqa: E402
+
+_fastmcp_server_module.create_sse_app = _patched_create_sse_app
 
 
 class FastMCPProtocol(Protocol):
@@ -372,8 +513,10 @@ rate_limit_config = RateLimitConfig(
         int(settings.middleware.api_rate_limit_per_minute / 2), 1
     ),  # Analysis is more expensive
 )
-mcp.add_middleware(Middleware(EnhancedRateLimitMiddleware, config=rate_limit_config))
-logger.info("Enhanced Rate Limiting Middleware added to MCP server")
+# mcp.add_middleware disabled: Starlette Middleware objects are not compatible
+# with FastMCP's _apply_middleware (expects a callable), causing tools/list to fail.
+# Rate limiting is not needed for personal use.
+logger.info("Rate limiting middleware skipped (personal use mode)")
 
 # Initialize enhanced health monitoring system
 logger.info("Initializing enhanced health monitoring system...")

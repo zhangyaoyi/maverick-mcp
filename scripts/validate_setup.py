@@ -73,7 +73,6 @@ def check_environment():
     optional_deps = [
         ("requests", "requests>=2.28.0", "HTTP library for fallback operations"),
         ("pytest", "pytest>=7.0.0", "Testing framework"),
-        ("asynctest", "asynctest>=0.13.0", "Async testing utilities"),
     ]
 
     for module, package, desc in optional_deps:

@@ -803,9 +803,22 @@ def get_sp500_symbols() -> list[str]:
 
     # Try to fetch from a public source (like Wikipedia or Yahoo Finance)
     try:
+        import requests
+        from io import StringIO
         # Using pandas to read S&P 500 list from Wikipedia
         url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        tables = pd.read_html(url)
+        
+        # Wikipedia blocks default User-Agents (like the python-urllib used by pandas directly)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
+        # requests will automatically use HTTP_PROXY/HTTPS_PROXY environment variables
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        # Provide text object to read_html to avoid direct requests by pandas
+        tables = pd.read_html(StringIO(response.text))
         sp500_table = tables[0]  # First table contains the S&P 500 list
         symbols = sp500_table["Symbol"].tolist()
         logger.info(f"Fetched {len(symbols)} S&P 500 symbols from Wikipedia")

@@ -66,7 +66,7 @@ uv run scripts/load_tiingo_data.py --symbols AAPL,MSFT,GOOGL,AMZN,TSLA --years 2
 ### Load S&P 500 (Top 100)
 ```bash
 # Load top 100 S&P 500 stocks with screening
-uv run scripts/load_tiingo_data.py --sp500 --years 1 --run-screening
+uv run scripts/load_tiingo_data.py --sp500 --years 2 --calculate-indicators --run-screening 
 ```
 
 ### Load from File

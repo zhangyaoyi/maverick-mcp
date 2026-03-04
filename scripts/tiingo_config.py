@@ -8,6 +8,15 @@ for different loading scenarios and environments.
 import os
 from dataclasses import dataclass
 from typing import Any
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+except ImportError:
+    pass
 
 
 @dataclass

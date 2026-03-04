@@ -10,7 +10,14 @@ import os
 import sys
 from pathlib import Path
 
-
+try:
+    from dotenv import load_dotenv
+    # Find .env file in parent directory (project root)
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+except ImportError:
+    pass  # dotenv is optional, fallback to OS env vars
 def check_dependency(module_name, package_name=None, description=""):
     """Check if a dependency is available."""
     if package_name is None:

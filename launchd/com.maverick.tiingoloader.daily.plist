@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.maverick.tiingoloader.daily</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/overman/Workspace/maverick-mcp</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+        <key>DATABASE_URL</key>
+        <string>postgresql://postgres:ZCBsBZhHAMKPj9RTwHHn@localhost:5432/maverick_mcp</string>
+        <key>TIINGO_API_TOKEN</key>
+        <string>32f50ec7392ce4c52c664c1a61854388ff3e6e20</string>
+    </dict>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/uv</string>
+        <string>run</string>
+        <string>scripts/load_tiingo_data.py</string>
+        <string>--sp500</string>
+        <string>--years</string>
+        <!-- 0.1 年 = 大约 1 个多月的数据，适合增量更新 -->
+        <string>0.1</string>
+        <string>--run-screening</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <!-- 每天周一到周五的北京时间 07:00 (美东夏令时 19:00 / 冬令时 18:00。注意：Launchd 使用的是你 Mac 电脑的本地时区，所以如果你的电脑是北京时间，直接写 7 即可) -->
+    <array>
+        <dict>
+            <key>Weekday</key>
+            <integer>2</integer>
+            <key>Hour</key>
+            <integer>7</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>3</integer>
+            <key>Hour</key>
+            <integer>7</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>4</integer>
+            <key>Hour</key>
+            <integer>7</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>5</integer>
+            <key>Hour</key>
+            <integer>7</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>6</integer>
+            <key>Hour</key>
+            <integer>7</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/overman/Workspace/maverick-mcp/logs/tiingo.daily.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/overman/Workspace/maverick-mcp/logs/tiingo.daily.err.log</string>
+</dict>
+</plist>

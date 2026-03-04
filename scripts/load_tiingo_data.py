@@ -52,7 +52,11 @@ DEFAULT_CHECKPOINT_FILE = os.getenv(
 )
 
 # Default timeout for requests (from tiingo-python)
-DEFAULT_TIMEOUT = int(os.getenv("TIINGO_TIMEOUT", "10"))
+DEFAULT_TIMEOUT = int(os.getenv("TIINGO_TIMEOUT", "30"))  # 增加到30秒，应对高延迟网络环境
+
+# Proxy configuration - aiohttp does not auto-read system proxies unlike `requests`
+# Reads HTTPS_PROXY first, falling back to HTTP_PROXY
+DEFAULT_PROXY = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
 
 
 class TiingoDataLoader:
@@ -182,7 +186,8 @@ class TiingoDataLoader:
             try:
                 timeout = aiohttp.ClientTimeout(total=self.timeout)
                 async with session.get(
-                    url, headers=headers, timeout=timeout
+                    url, headers=headers, timeout=timeout,
+                    proxy=DEFAULT_PROXY or None,
                 ) as response:
                     if response.status == 200:
                         return await response.json()

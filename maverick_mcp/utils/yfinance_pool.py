@@ -11,9 +11,6 @@ from typing import Any
 
 import pandas as pd
 import yfinance as yf
-from requests import Session
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +35,6 @@ class YFinancePool:
         if self._initialized:
             return
 
-        # Create optimized session with connection pooling
-        self.session = self._create_optimized_session()
-
         # Thread pool for parallel requests
         self.executor = ThreadPoolExecutor(
             max_workers=10, thread_name_prefix="yfinance_pool"
@@ -54,55 +48,16 @@ class YFinancePool:
         self._initialized = True
         logger.info("YFinance connection pool initialized")
 
-    def _create_optimized_session(self) -> Session:
-        """Create an optimized requests session with retry logic and connection pooling."""
-        session = Session()
-
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=3,
-            backoff_factor=0.3,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET", "POST"],
-        )
-
-        # Configure adapter with connection pooling
-        adapter = HTTPAdapter(
-            pool_connections=10,  # Number of connection pools
-            pool_maxsize=50,  # Max connections per pool
-            max_retries=retry_strategy,
-            pool_block=False,  # Don't block when pool is full
-        )
-
-        # Mount adapter for HTTP and HTTPS
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-
-        # Set headers to avoid rate limiting
-        session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-                "Accept-Encoding": "gzip, deflate",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-            }
-        )
-
-        return session
-
     def get_ticker(self, symbol: str) -> yf.Ticker:
-        """Get a ticker object - let yfinance handle session for compatibility."""
+        """Get a ticker object - let yfinance manage its own curl_cffi session."""
         # Check cache first
         cache_key = f"ticker_{symbol}"
         cached = self._get_from_cache(cache_key)
         if cached:
             return cached
 
-        # Create ticker with custom optimized rate-limited session
-        ticker = yf.Ticker(symbol, session=self.session)
+        # Do NOT pass a custom session — yfinance requires its own curl_cffi session
+        ticker = yf.Ticker(symbol)
 
         # Cache for short duration
         self._add_to_cache(cache_key, ticker, ttl=300)  # 5 minutes
@@ -177,7 +132,7 @@ class YFinancePool:
         threads: bool = True,
     ) -> pd.DataFrame:
         """Download data for multiple symbols efficiently."""
-        # Use yfinance's batch download with our optimized custom session
+        # Do NOT pass session= — yfinance requires its own curl_cffi session
         if period:
             data = yf.download(
                 tickers=symbols,
@@ -186,7 +141,6 @@ class YFinancePool:
                 group_by=group_by,
                 threads=threads,
                 progress=False,
-                session=self.session,
             )
         else:
             if start is None:
@@ -202,7 +156,6 @@ class YFinancePool:
                 group_by=group_by,
                 threads=threads,
                 progress=False,
-                session=self.session,
             )
 
         return data
@@ -250,7 +203,6 @@ class YFinancePool:
     def close(self):
         """Clean up resources."""
         try:
-            self.session.close()
             self.executor.shutdown(wait=False)
             logger.info("YFinance connection pool closed")
         except Exception as e:

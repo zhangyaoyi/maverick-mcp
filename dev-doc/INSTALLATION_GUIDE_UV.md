@@ -18,7 +18,7 @@ The Tiingo data loader provides:
 ### 1. Check Your Setup
 ```bash
 cd /path/to/maverick-mcp
-uv run scripts/validate_setup.py
+uv run --env-file .env scripts/validate_setup.py
 ```
 
 This will show you exactly what needs to be installed or configured.
@@ -51,7 +51,7 @@ export POSTGRES_URL=postgresql://user:password@localhost/maverick_mcp
 
 ### 5. Verify Setup
 ```bash
-uv run scripts/validate_setup.py
+uv run --env-file .env scripts/validate_setup.py
 ```
 You should see "🎉 Setup validation PASSED!"
 
@@ -60,13 +60,13 @@ You should see "🎉 Setup validation PASSED!"
 ### Load Sample Stocks
 ```bash
 # Load 5 popular stocks with 2 years of data
-uv run scripts/load_tiingo_data.py --symbols AAPL,MSFT,GOOGL,AMZN,TSLA --years 2 --calculate-indicators
+uv run --env-file .env scripts/load_tiingo_data.py --symbols AAPL,MSFT,GOOGL,AMZN,TSLA --years 2 --calculate-indicators
 ```
 
 ### Load S&P 500 (Top 100)
 ```bash
 # Load top 100 S&P 500 stocks with screening
-uv run scripts/load_tiingo_data.py --sp500 --years 2 --calculate-indicators --run-screening 
+uv run --env-file .env scripts/load_tiingo_data.py --sp500 --years 2 --calculate-indicators --run-screening 
 ```
 
 ### Load from File
@@ -75,13 +75,13 @@ uv run scripts/load_tiingo_data.py --sp500 --years 2 --calculate-indicators --ru
 echo -e "AAPL\nMSFT\nGOOGL\nTSLA\nNVDA" > my_stocks.txt
 
 # Load from file
-uv run scripts/load_tiingo_data.py --file my_stocks.txt --calculate-indicators --run-screening
+uv run --env-file .env scripts/load_tiingo_data.py --file my_stocks.txt --calculate-indicators --run-screening
 ```
 
 ### Interactive Examples
 ```bash
 # Run guided examples
-uv run scripts/load_example.py
+uv run --env-file .env scripts/load_example.py
 ```
 
 ## 🏗️ Architecture
@@ -212,7 +212,7 @@ uv pip install -r scripts/requirements_tiingo.txt
 #### 2. API Rate Limiting
 ```bash
 # Reduce concurrency if getting rate limited
-uv run scripts/load_tiingo_data.py --symbols AAPL --max-concurrent 2
+uv run --env-file .env scripts/load_tiingo_data.py --symbols AAPL --max-concurrent 2
 ```
 
 #### 3. Database Connection Issues
@@ -228,37 +228,37 @@ with SessionLocal() as session:
 #### 4. Memory Issues
 ```bash
 # Reduce batch size for large loads
-uv run scripts/load_tiingo_data.py --sp500 --batch-size 25 --max-concurrent 3
+uv run --env-file .env scripts/load_tiingo_data.py --sp500 --batch-size 25 --max-concurrent 3
 ```
 
 #### 5. Checkpoint File Corruption
 ```bash
 # Remove corrupted checkpoint and restart
 rm load_progress.json
-uv run scripts/load_tiingo_data.py --symbols AAPL,MSFT
+uv run --env-file .env scripts/load_tiingo_data.py --symbols AAPL,MSFT
 ```
 
 ### Getting Help
-1. **Validation Script**: `uv run scripts/validate_setup.py`
+1. **Validation Script**: `uv run --env-file .env scripts/validate_setup.py`
 2. **Check Logs**: `tail -f tiingo_data_loader.log`
-3. **Test Individual Components**: `uv run scripts/test_tiingo_loader.py`
-4. **Interactive Examples**: `uv run scripts/load_example.py`
+3. **Test Individual Components**: `uv run --env-file .env scripts/test_tiingo_loader.py`
+4. **Interactive Examples**: `uv run --env-file .env scripts/load_example.py`
 
 ## 🎯 Best Practices
 
 ### For Development
 ```bash
 # Start small for testing
-uv run scripts/load_tiingo_data.py --symbols AAPL,MSFT --years 0.5 --batch-size 10
+uv run --env-file .env scripts/load_tiingo_data.py --symbols AAPL,MSFT --years 0.5 --batch-size 10
 
 # Use checkpoints for large loads
-uv run scripts/load_tiingo_data.py --sp500 --checkpoint-file dev_progress.json
+uv run --env-file .env scripts/load_tiingo_data.py --sp500 --checkpoint-file dev_progress.json
 ```
 
 ### For Production
 ```bash
 # Higher performance settings
-uv run scripts/load_tiingo_data.py --sp500-full \
+uv run --env-file .env scripts/load_tiingo_data.py --sp500-full \
     --batch-size 100 \
     --max-concurrent 10 \
     --years 2 \
@@ -271,10 +271,10 @@ uv run scripts/load_tiingo_data.py --sp500-full \
 ### For Resume Operations
 ```bash
 # Always use checkpoints for large operations
-uv run scripts/load_tiingo_data.py --supported --checkpoint-file full_load.json
+uv run --env-file .env scripts/load_tiingo_data.py --supported --checkpoint-file full_load.json
 
 # If interrupted, resume with:
-uv run scripts/load_tiingo_data.py --resume --checkpoint-file full_load.json
+uv run --env-file .env scripts/load_tiingo_data.py --resume --checkpoint-file full_load.json
 ```
 
 ## 📊 Performance Benchmarks
@@ -330,7 +330,7 @@ Once setup is complete, you should be able to:
 6. ✅ Build custom trading strategies
 
 **Next Steps:**
-- Explore the interactive examples: `uv run scripts/load_example.py`
+- Explore the interactive examples: `uv run --env-file .env scripts/load_example.py`
 - Read the full documentation: `scripts/README_TIINGO_LOADER.md`
 - Set up automated daily updates (see below)
 - Customize screening algorithms for your strategy

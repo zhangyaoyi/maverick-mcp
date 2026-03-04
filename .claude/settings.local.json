@@ -115,13 +115,13 @@
       "TodoRead",
       "TodoWrite",
       "NotebookRead",
-      "NotebookEdit"
+      "NotebookEdit",
+      "Bash(uv run:*)"
     ],
     "deny": [
       "Bash(rm -rf /)",
       "Bash(rm -rf ~)",
       "Bash(rm -rf ~/)",
-      "Bash(:(){ :|:& };:)",
       "Bash(sudo rm *)",
       "Bash(> /dev/sda*)",
       "Bash(dd if=/dev/zero *)",

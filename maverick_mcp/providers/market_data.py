@@ -103,7 +103,7 @@ class ExternalAPIClient:
         ]
 
         if not self.api_key:
-            logger.warning("External API key not configured")
+            logger.debug("External API key not configured (CAPITAL_COMPANION_API_KEY), skipping")
             return [] if endpoint in list_endpoints else {}
 
         url = f"{self.base_url}{endpoint}"

@@ -130,22 +130,7 @@ MODEL_PROFILES = {
         ],
         temperature=0.3,
     ),
-    "deepseek/deepseek-r1": ModelProfile(
-        model_id="deepseek/deepseek-r1",
-        name="DeepSeek R1",
-        provider="deepseek",
-        context_length=128000,
-        cost_per_million_input=0.5,
-        cost_per_million_output=1.0,
-        speed_rating=8,
-        quality_rating=9,
-        best_for=[
-            TaskType.MARKET_ANALYSIS,
-            TaskType.TECHNICAL_ANALYSIS,
-            TaskType.RISK_ASSESSMENT,
-        ],
-        temperature=0.3,
-    ),
+    # DeepSeek R1 removed: returns 403 "not available in your region" via OpenRouter
     # Fast, cost-effective models for simpler tasks
     # Speed-optimized models for research timeouts
     "google/gemini-2.5-flash": ModelProfile(

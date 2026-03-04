@@ -19,6 +19,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - YFINANCE_CACHE_DIR=/tmp/yfinance-cache
+      - PYTHONWARNINGS=ignore::DeprecationWarning
     volumes:
       - ./maverick_mcp:/app/maverick_mcp
       - ./alembic:/app/alembic

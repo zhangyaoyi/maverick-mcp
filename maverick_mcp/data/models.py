@@ -353,6 +353,10 @@ class Stock(Base, TimestampMixin):
     """Stock model for storing basic stock information."""
 
     __tablename__ = "mcp_stocks"
+    __table_args__ = (
+        Index("mcp_stocks_sector_idx", "sector"),
+        Index("mcp_stocks_exchange_idx", "exchange"),
+    )
 
     stock_id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     ticker_symbol = Column(String(10), unique=True, nullable=False, index=True)
@@ -417,6 +421,10 @@ class PriceCache(Base, TimestampMixin):
         UniqueConstraint("stock_id", "date", name="mcp_price_cache_stock_date_unique"),
         Index("mcp_price_cache_stock_id_date_idx", "stock_id", "date"),
         Index("mcp_price_cache_ticker_date_idx", "stock_id", "date"),
+        # Single-column date index for date-range scans without stock filter
+        Index("mcp_price_cache_date_idx", "date"),
+        # Volume DESC index for get_high_volume_stocks(): ORDER BY volume DESC
+        Index("mcp_price_cache_volume_idx", "volume", postgresql_ops={"volume": "DESC"}),
     )
 
     price_cache_id = Column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -500,7 +508,8 @@ class MaverickStocks(Base, TimestampMixin):
 
     __tablename__ = "mcp_maverick_stocks"
     __table_args__ = (
-        Index("mcp_maverick_stocks_combined_score_idx", "combined_score"),
+        # DESC: primary sort is ORDER BY combined_score DESC
+        Index("mcp_maverick_stocks_combined_score_idx", "combined_score", postgresql_ops={"combined_score": "DESC"}),
         Index(
             "mcp_maverick_stocks_momentum_score_idx", "momentum_score"
         ),  # formerly rs_rating_idx
@@ -614,7 +623,8 @@ class MaverickBearStocks(Base, TimestampMixin):
 
     __tablename__ = "mcp_maverick_bear_stocks"
     __table_args__ = (
-        Index("mcp_maverick_bear_stocks_score_idx", "score"),
+        # DESC: primary sort is ORDER BY score DESC
+        Index("mcp_maverick_bear_stocks_score_idx", "score", postgresql_ops={"score": "DESC"}),
         Index(
             "mcp_maverick_bear_stocks_momentum_score_idx", "momentum_score"
         ),  # formerly rs_rating_idx
@@ -737,8 +747,11 @@ class SupplyDemandBreakoutStocks(Base, TimestampMixin):
 
     __tablename__ = "mcp_supply_demand_breakouts"
     __table_args__ = (
+        # DESC: primary sort is ORDER BY momentum_score DESC
         Index(
-            "mcp_supply_demand_breakouts_momentum_score_idx", "momentum_score"
+            "mcp_supply_demand_breakouts_momentum_score_idx",
+            "momentum_score",
+            postgresql_ops={"momentum_score": "DESC"},
         ),  # formerly rs_rating_idx
         Index("mcp_supply_demand_breakouts_date_analyzed_idx", "date_analyzed"),
         Index(
@@ -900,6 +913,13 @@ class TechnicalCache(Base, TimestampMixin):
         Index("mcp_technical_cache_stock_date_idx", "stock_id", "date"),
         Index("mcp_technical_cache_indicator_idx", "indicator_type"),
         Index("mcp_technical_cache_date_idx", "date"),
+        # 3-col composite for: WHERE stock_id=? AND date>=? AND indicator_type=?
+        Index(
+            "mcp_technical_cache_stock_date_indicator_idx",
+            "stock_id",
+            "date",
+            "indicator_type",
+        ),
     )
 
     id = Column(get_primary_key_type(), primary_key=True, autoincrement=True)

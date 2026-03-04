@@ -29,6 +29,7 @@ services:
       - ./.env:/app/.env
     networks:
       - maverick-net
+    restart: unless-stopped
 
 networks:
   maverick-net:

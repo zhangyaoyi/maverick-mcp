@@ -101,8 +101,8 @@ class YFinancePool:
         if cached:
             return cached
 
-        # Create ticker without custom session (yfinance now requires curl_cffi)
-        ticker = yf.Ticker(symbol)
+        # Create ticker with custom optimized rate-limited session
+        ticker = yf.Ticker(symbol, session=self.session)
 
         # Cache for short duration
         self._add_to_cache(cache_key, ticker, ttl=300)  # 5 minutes
@@ -177,7 +177,7 @@ class YFinancePool:
         threads: bool = True,
     ) -> pd.DataFrame:
         """Download data for multiple symbols efficiently."""
-        # Use yfinance's batch download without custom session
+        # Use yfinance's batch download with our optimized custom session
         if period:
             data = yf.download(
                 tickers=symbols,
@@ -186,6 +186,7 @@ class YFinancePool:
                 group_by=group_by,
                 threads=threads,
                 progress=False,
+                session=self.session,
             )
         else:
             if start is None:
@@ -201,6 +202,7 @@ class YFinancePool:
                 group_by=group_by,
                 threads=threads,
                 progress=False,
+                session=self.session,
             )
 
         return data

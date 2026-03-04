@@ -38,14 +38,14 @@ class DatabasePoolConfig(BaseModel):
 
     # Core pool configuration
     pool_size: int = Field(
-        default_factory=lambda: int(os.getenv("DB_POOL_SIZE", "20")),
+        default_factory=lambda: int(os.getenv("DB_POOL_SIZE", "50")),
         ge=1,
         le=100,
         description="Number of connections to maintain in the pool (1-100)",
     )
 
     max_overflow: int = Field(
-        default_factory=lambda: int(os.getenv("DB_MAX_OVERFLOW", "10")),
+        default_factory=lambda: int(os.getenv("DB_MAX_OVERFLOW", "30")),
         ge=0,
         le=50,
         description="Maximum overflow connections above pool size (0-50)",

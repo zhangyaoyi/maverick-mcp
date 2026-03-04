@@ -53,8 +53,8 @@ class StrategyExecutor:
 
     def __init__(
         self,
-        max_concurrent_strategies: int = 6,
-        max_concurrent_api_requests: int = 10,
+        max_concurrent_strategies: int = 8,
+        max_concurrent_api_requests: int = 15,
         connection_pool_size: int = 100,
         request_timeout: int = 30,
         cache_manager: CacheManager | None = None,

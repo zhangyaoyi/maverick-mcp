@@ -9,6 +9,7 @@ from typing import Any
 
 from langchain_community.llms import FakeListLLM
 
+from maverick_mcp.providers.bailian_provider import get_bailian_llm
 from maverick_mcp.providers.openrouter_provider import (
     TaskType,
     get_openrouter_llm,
@@ -37,12 +38,25 @@ def get_llm(
         An LLM instance optimized for the task.
 
     Priority order:
-    1. OpenRouter API if OPENROUTER_API_KEY is available (with smart model selection)
-    2. OpenAI ChatOpenAI if OPENAI_API_KEY is available (fallback)
-    3. Anthropic ChatAnthropic if ANTHROPIC_API_KEY is available (fallback)
-    4. FakeListLLM as fallback for testing
+    1. Bailian (Aliyun) if ALIYUN_API_KEY is available (primary - qwen3.5-plus default)
+    2. OpenRouter API if OPENROUTER_API_KEY is available (with smart model selection)
+    3. OpenAI ChatOpenAI if OPENAI_API_KEY is available (fallback)
+    4. Anthropic ChatAnthropic if ANTHROPIC_API_KEY is available (fallback)
+    5. FakeListLLM as fallback for testing
     """
-    # Check for OpenRouter first (preferred)
+    # Check for Bailian first (primary provider)
+    aliyun_api_key = os.getenv("ALIYUN_API_KEY")
+    if aliyun_api_key:
+        return get_bailian_llm(
+            api_key=aliyun_api_key,
+            task_type=task_type,
+            prefer_fast=prefer_fast,
+            prefer_cheap=prefer_cheap,
+            prefer_quality=prefer_quality,
+            model_override=model_override,
+        )
+
+    # Check for OpenRouter (second priority)
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     if openrouter_api_key:
         logger.info(

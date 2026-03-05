@@ -6,7 +6,7 @@
     <string>com.maverick.tiingoloader.daily</string>
 
     <key>WorkingDirectory</key>
-    <string>/Users/overman/Workspace/maverick-mcp</string>
+    <string>/Users/overman/projects/maverick-mcp</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -19,7 +19,7 @@
         <string>/Users/overman/.local/bin/uv</string>
         <string>run</string>
         <string>--env-file</string>
-        <string>/Users/overman/Workspace/maverick-mcp/.env</string>
+        <string>/Users/overman/projects/maverick-mcp/.env</string>
         <string>scripts/load_tiingo_data.py</string>
         <string>--sp500</string>
         <string>--years</string>
@@ -59,8 +59,8 @@
     </array>
 
     <key>StandardOutPath</key>
-    <string>/Users/overman/Workspace/maverick-mcp/logs/tiingo.daily.out.log</string>
+    <string>/Users/overman/projects/maverick-mcp/logs/tiingo.daily.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/overman/Workspace/maverick-mcp/logs/tiingo.daily.err.log</string>
+    <string>/Users/overman/projects/maverick-mcp/logs/tiingo.daily.err.log</string>
 </dict>
 </plist>

@@ -6,7 +6,7 @@
     <string>com.maverick.tiingoloader.weekly</string>
 
     <key>WorkingDirectory</key>
-    <string>/Users/overman/Workspace/maverick-mcp</string>
+    <string>/Users/overman/projects/maverick-mcp</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -19,7 +19,7 @@
         <string>/Users/overman/.local/bin/uv</string>
         <string>run</string>
         <string>--env-file</string>
-        <string>/Users/overman/Workspace/maverick-mcp/.env</string>
+        <string>/Users/overman/projects/maverick-mcp/.env</string>
         <string>scripts/load_tiingo_data.py</string>
         <string>--sp500</string>
         <!-- 深度刷新：拉取2年完整数据并重算所有技术指标 -->
@@ -38,8 +38,8 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/overman/Workspace/maverick-mcp/logs/tiingo.weekly.out.log</string>
+    <string>/Users/overman/projects/maverick-mcp/logs/tiingo.weekly.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/overman/Workspace/maverick-mcp/logs/tiingo.weekly.err.log</string>
+    <string>/Users/overman/projects/maverick-mcp/logs/tiingo.weekly.err.log</string>
 </dict>
 </plist>

@@ -97,6 +97,14 @@ class EnhancedStockDataProvider:
                 f"Database session test failed: {e}. Caching may not work properly."
             )
 
+    @staticmethod
+    def _strip_tz(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+        """Return a tz-naive DatetimeIndex regardless of whether input is tz-aware."""
+        index = pd.to_datetime(index)
+        if index.tz is not None:
+            return index.tz_convert(None)
+        return index
+
     def _get_data_with_smart_cache(
         self, symbol: str, start_date: str, end_date: str, interval: str
     ) -> pd.DataFrame:
@@ -137,8 +145,9 @@ class EnhancedStockDataProvider:
                 logger.info(f"Found {len(cached_df)} cached records for {symbol}")
 
                 # Check if we have all the data we need - ensure timezone-naive for comparison
-                cached_start = pd.to_datetime(cached_df.index.min()).tz_localize(None)
-                cached_end = pd.to_datetime(cached_df.index.max()).tz_localize(None)
+                norm_index = self._strip_tz(cached_df.index)
+                cached_start = norm_index.min()
+                cached_end = norm_index.max()
 
                 # Identify missing ranges
                 missing_ranges = []
@@ -180,12 +189,13 @@ class EnhancedStockDataProvider:
                         f"Cache hit! Returning {len(cached_df)} cached records for {symbol}"
                     )
                     # Filter to requested range - ensure index is timezone-naive
-                    cached_df.index = pd.to_datetime(cached_df.index).tz_localize(None)
+                    cached_df.index = self._strip_tz(cached_df.index)
                     mask = (cached_df.index >= start_dt) & (cached_df.index <= end_dt)
                     return cached_df.loc[mask]
 
                 # Step 3: Fetch only missing data
                 logger.info(f"Cache partial hit. Missing ranges: {missing_ranges}")
+                cached_df.index = self._strip_tz(cached_df.index)
                 all_dfs = [cached_df]
 
                 for miss_start, miss_end in missing_ranges:
@@ -196,17 +206,17 @@ class EnhancedStockDataProvider:
                         symbol, miss_start, miss_end, None, interval
                     )
                     if not missing_df.empty:
+                        missing_df.index = self._strip_tz(missing_df.index)
                         all_dfs.append(missing_df)
                         # Cache the new data
                         self._cache_price_data(session, symbol, missing_df)
 
-                # Combine all data
+                # Combine all data (all indexes are now tz-naive)
                 combined_df = pd.concat(all_dfs).sort_index()
                 # Remove any duplicates (keep first)
                 combined_df = combined_df[~combined_df.index.duplicated(keep="first")]
 
-                # Filter to requested range - ensure index is timezone-naive
-                combined_df.index = pd.to_datetime(combined_df.index).tz_localize(None)
+                # Filter to requested range
                 mask = (combined_df.index >= start_dt) & (combined_df.index <= end_dt)
                 return combined_df.loc[mask]
 
@@ -309,7 +319,7 @@ class EnhancedStockDataProvider:
                 )
 
             # Ensure index is timezone-naive for consistency
-            df.index = pd.to_datetime(df.index).tz_localize(None)
+            df.index = self._strip_tz(df.index)
 
             return df
 
@@ -352,14 +362,8 @@ class EnhancedStockDataProvider:
             DatetimeIndex of trading days (timezone-naive)
         """
         # Ensure dates are datetime objects (timezone-naive)
-        if isinstance(start_date, str):
-            start_date = pd.to_datetime(start_date).tz_localize(None)
-        else:
-            start_date = pd.to_datetime(start_date).tz_localize(None)
-        if isinstance(end_date, str):
-            end_date = pd.to_datetime(end_date).tz_localize(None)
-        else:
-            end_date = pd.to_datetime(end_date).tz_localize(None)
+        start_date = self._strip_tz(pd.DatetimeIndex([pd.to_datetime(start_date)]))[0]
+        end_date = self._strip_tz(pd.DatetimeIndex([pd.to_datetime(end_date)]))[0]
 
         # Get valid trading days from market calendar
         schedule = self.market_calendar.schedule(

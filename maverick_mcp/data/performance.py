@@ -115,6 +115,7 @@ class RedisConnectionManager:
             self._metrics["errors"] += 1
             self._metrics["last_error"] = str(e)
             self._healthy = False
+            self._initialized = False  # Allow retry on next call
             return False
 
     async def get_client(self) -> redis.Redis | None:
@@ -131,6 +132,13 @@ class RedisConnectionManager:
             await self._health_check()
 
         return self._client if self._healthy else None
+
+    def _reset(self) -> None:
+        """Reset manager state so it can be re-initialized on a new event loop."""
+        self._pool = None
+        self._client = None
+        self._initialized = False
+        self._healthy = False
 
     async def _health_check(self) -> bool:
         """
@@ -161,6 +169,10 @@ class RedisConnectionManager:
             self._healthy = False
             self._metrics["errors"] += 1
             self._metrics["last_error"] = str(e)
+
+            # If the event loop was closed/replaced, reset so we re-initialize
+            if "Event loop is closed" in str(e):
+                self._reset()
 
             # Try to reinitialize
             await self.initialize()

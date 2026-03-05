@@ -205,28 +205,34 @@ class OptimizationPresets:
 
 
 class ModelSelectionStrategy:
-    """Strategies for model selection in different scenarios."""
+    """Strategies for model selection in different scenarios.
 
+    All models confirmed available on OpenRouter as of March 2026.
+    Region-restricted models (DeepSeek, xAI) intentionally excluded.
+    """
+
+    # Speed-first: use when timeout < 60s
     TIME_CRITICAL_MODELS = [
-        "google/gemini-2.5-flash",  # 199 tokens/sec - FASTEST
-        "openai/gpt-4o-mini",  # 126 tokens/sec - Most cost-effective
-        "openai/gpt-5-nano",  # 180 tokens/sec - High speed
-        "anthropic/claude-3.5-haiku",  # 65.6 tokens/sec - Fallback
+        "google/gemini-2.5-flash",         # Fastest, $0.30/$2.50
+        "openai/gpt-4o-mini",              # Reliable fallback, $0.15/$0.60
+        "anthropic/claude-haiku-4.5",      # Anthropic fast option, $1/$5
     ]
 
+    # Balance speed, quality and cost for standard requests — GLM-5 primary
     BALANCED_MODELS = [
-        "google/gemini-2.5-flash",  # 199 tokens/sec - Speed-optimized
-        "openai/gpt-4o-mini",  # 126 tokens/sec - Cost & speed balance
-        "deepseek/deepseek-r1",  # 90+ tokens/sec - Good value
-        "anthropic/claude-sonnet-4",  # High quality when needed
-        "google/gemini-2.5-pro",  # Comprehensive analysis
-        "openai/gpt-5",  # Fallback option
+        "z-ai/glm-5",                      # Primary workhorse, $0.80/$2.56
+        "google/gemini-3-flash-preview",   # Fast + capable, $0.50/$3
+        "google/gemini-2.5-flash",         # Ultra-fast backup, $0.30/$2.50
+        "openai/gpt-4o-mini",              # Cost-effective, $0.15/$0.60
+        "anthropic/claude-sonnet-4.6",     # High quality fallback, $3/$15
+        "google/gemini-3.1-pro-preview",   # Deep reasoning, $2/$12
     ]
 
+    # Quality-first: use for complex/expert research
     QUALITY_MODELS = [
-        "google/gemini-2.5-pro",
-        "anthropic/claude-opus-4.1",
-        "anthropic/claude-sonnet-4",
+        "z-ai/glm-5",                      # Primary, $0.80/$2.56
+        "anthropic/claude-sonnet-4.6",     # Best Anthropic, $3/$15
+        "google/gemini-3.1-pro-preview",   # Strong reasoning, $2/$12
     ]
 
     @classmethod
@@ -239,11 +245,11 @@ class ModelSelectionStrategy:
         """Get prioritized model list for selection."""
 
         if time_remaining < 30:
-            # Emergency mode: ultra-fast models for <30s timeouts (prioritize speed)
-            return cls.TIME_CRITICAL_MODELS[:2]  # Use only the 2 fastest models
+            # Emergency: absolute fastest only
+            return cls.TIME_CRITICAL_MODELS[:2]
         elif time_remaining < 60:
-            # Mix of fast and balanced models (speed-first approach)
-            return cls.TIME_CRITICAL_MODELS[:3] + cls.BALANCED_MODELS[:2]
+            # Mix fast + balanced
+            return cls.TIME_CRITICAL_MODELS[:2] + cls.BALANCED_MODELS[:3]
         elif complexity in [ResearchComplexity.COMPLEX, ResearchComplexity.EXPERT]:
             return cls.QUALITY_MODELS + cls.BALANCED_MODELS
         else:

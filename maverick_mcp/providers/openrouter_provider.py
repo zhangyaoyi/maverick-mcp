@@ -11,6 +11,13 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+try:
+    from openai import PermissionDeniedError as OpenAIPermissionDeniedError
+
+    _REGION_ERRORS: tuple[type[Exception], ...] = (OpenAIPermissionDeniedError,)
+except ImportError:
+    _REGION_ERRORS = (Exception,)
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,28 +69,37 @@ class ModelProfile(BaseModel):
 
 
 # Model profiles for intelligent selection
+# Pricing in USD per million tokens (as of March 2026 via OpenRouter)
+# Region note: DeepSeek and xAI models excluded — 403 region restrictions observed
 MODEL_PROFILES = {
-    # Premium models (use sparingly for critical tasks)
-    "anthropic/claude-opus-4.1": ModelProfile(
-        model_id="anthropic/claude-opus-4.1",
-        name="Claude Opus 4.1",
-        provider="anthropic",
-        context_length=200000,
-        cost_per_million_input=15.0,
-        cost_per_million_output=75.0,
+    # ── Primary workhorse ───────────────────────────────────────────────────
+    "z-ai/glm-5": ModelProfile(
+        model_id="z-ai/glm-5",
+        name="GLM-5",
+        provider="z-ai",
+        context_length=203_000,
+        cost_per_million_input=0.80,
+        cost_per_million_output=2.56,
         speed_rating=7,
-        quality_rating=10,
+        quality_rating=9,
         best_for=[
-            TaskType.COMPLEX_REASONING,  # Only for the most complex tasks
+            TaskType.DEEP_RESEARCH,
+            TaskType.MARKET_ANALYSIS,
+            TaskType.TECHNICAL_ANALYSIS,
+            TaskType.RESULT_SYNTHESIS,
+            TaskType.PORTFOLIO_OPTIMIZATION,
+            TaskType.RISK_ASSESSMENT,
+            TaskType.COMPLEX_REASONING,
+            TaskType.MULTI_AGENT_ORCHESTRATION,
         ],
         temperature=0.3,
     ),
-    # Cost-effective high-quality models (primary workhorses)
-    "anthropic/claude-sonnet-4": ModelProfile(
-        model_id="anthropic/claude-sonnet-4",
-        name="Claude Sonnet 4",
+    # ── High-quality tier ───────────────────────────────────────────────────
+    "anthropic/claude-sonnet-4.6": ModelProfile(
+        model_id="anthropic/claude-sonnet-4.6",
+        name="Claude Sonnet 4.6",
         provider="anthropic",
-        context_length=1000000,  # 1M token context capability!
+        context_length=1_000_000,
         cost_per_million_input=3.0,
         cost_per_million_output=15.0,
         speed_rating=8,
@@ -95,58 +111,60 @@ MODEL_PROFILES = {
             TaskType.MULTI_AGENT_ORCHESTRATION,
             TaskType.RESULT_SYNTHESIS,
             TaskType.PORTFOLIO_OPTIMIZATION,
+            TaskType.RISK_ASSESSMENT,
         ],
         temperature=0.3,
     ),
-    "openai/gpt-5": ModelProfile(
-        model_id="openai/gpt-5",
-        name="GPT-5",
-        provider="openai",
-        context_length=400000,
-        cost_per_million_input=1.25,
-        cost_per_million_output=10.0,
-        speed_rating=8,
-        quality_rating=9,
-        best_for=[
-            TaskType.DEEP_RESEARCH,
-            TaskType.MARKET_ANALYSIS,
-        ],
-        temperature=0.3,
-    ),
-    # Excellent cost-performance ratio models
-    "google/gemini-2.5-pro": ModelProfile(
-        model_id="google/gemini-2.5-pro",
-        name="Gemini 2.5 Pro",
+    "google/gemini-3.1-pro-preview": ModelProfile(
+        model_id="google/gemini-3.1-pro-preview",
+        name="Gemini 3.1 Pro Preview",
         provider="google",
-        context_length=1000000,  # 1M token context!
+        context_length=1_000_000,
         cost_per_million_input=2.0,
-        cost_per_million_output=8.0,
-        speed_rating=8,
+        cost_per_million_output=12.0,
+        speed_rating=7,
         quality_rating=9,
         best_for=[
             TaskType.DEEP_RESEARCH,
             TaskType.MARKET_ANALYSIS,
             TaskType.TECHNICAL_ANALYSIS,
+            TaskType.COMPLEX_REASONING,
+            TaskType.MULTI_AGENT_ORCHESTRATION,
         ],
         temperature=0.3,
     ),
-    # DeepSeek R1 removed: returns 403 "not available in your region" via OpenRouter
-    # Fast, cost-effective models for simpler tasks
-    # Speed-optimized models for research timeouts
-    "google/gemini-2.5-flash": ModelProfile(
-        model_id="google/gemini-2.5-flash",
-        name="Gemini 2.5 Flash",
+    # ── Fast tier (speed + cost balance) ────────────────────────────────────
+    "google/gemini-3-flash-preview": ModelProfile(
+        model_id="google/gemini-3-flash-preview",
+        name="Gemini 3 Flash Preview",
         provider="google",
-        context_length=1000000,
-        cost_per_million_input=0.075,  # Ultra low cost
-        cost_per_million_output=0.30,
-        speed_rating=10,  # 199 tokens/sec - FASTEST available
+        context_length=1_000_000,
+        cost_per_million_input=0.50,
+        cost_per_million_output=3.0,
+        speed_rating=9,
         quality_rating=8,
         best_for=[
             TaskType.DEEP_RESEARCH,
             TaskType.MARKET_ANALYSIS,
-            TaskType.QUICK_ANSWER,
             TaskType.SENTIMENT_ANALYSIS,
+            TaskType.QUICK_ANSWER,
+        ],
+        temperature=0.2,
+    ),
+    "google/gemini-2.5-flash": ModelProfile(
+        model_id="google/gemini-2.5-flash",
+        name="Gemini 2.5 Flash",
+        provider="google",
+        context_length=1_000_000,
+        cost_per_million_input=0.30,
+        cost_per_million_output=2.50,
+        speed_rating=10,  # Fastest available
+        quality_rating=8,
+        best_for=[
+            TaskType.DEEP_RESEARCH,
+            TaskType.MARKET_ANALYSIS,
+            TaskType.SENTIMENT_ANALYSIS,
+            TaskType.QUICK_ANSWER,
         ],
         temperature=0.2,
     ),
@@ -154,67 +172,35 @@ MODEL_PROFILES = {
         model_id="openai/gpt-4o-mini",
         name="GPT-4o Mini",
         provider="openai",
-        context_length=128000,
+        context_length=128_000,
         cost_per_million_input=0.15,
         cost_per_million_output=0.60,
-        speed_rating=9,  # 126 tokens/sec - Excellent speed/cost balance
-        quality_rating=8,
+        speed_rating=9,
+        quality_rating=7,
         best_for=[
-            TaskType.DEEP_RESEARCH,
             TaskType.MARKET_ANALYSIS,
             TaskType.TECHNICAL_ANALYSIS,
             TaskType.QUICK_ANSWER,
-        ],
-        temperature=0.2,
-    ),
-    "anthropic/claude-3.5-haiku": ModelProfile(
-        model_id="anthropic/claude-3.5-haiku",
-        name="Claude 3.5 Haiku",
-        provider="anthropic",
-        context_length=200000,
-        cost_per_million_input=0.25,
-        cost_per_million_output=1.25,
-        speed_rating=7,  # 65.6 tokens/sec - Updated with actual speed rating
-        quality_rating=8,
-        best_for=[
-            TaskType.QUERY_CLASSIFICATION,
-            TaskType.QUICK_ANSWER,
             TaskType.SENTIMENT_ANALYSIS,
         ],
         temperature=0.2,
     ),
-    "openai/gpt-5-nano": ModelProfile(
-        model_id="openai/gpt-5-nano",
-        name="GPT-5 Nano",
-        provider="openai",
-        context_length=400000,
-        cost_per_million_input=0.05,
-        cost_per_million_output=0.40,
-        speed_rating=9,  # 180 tokens/sec - Very fast
+    # ── Lightweight tier (classification / routing) ──────────────────────────
+    "anthropic/claude-haiku-4.5": ModelProfile(
+        model_id="anthropic/claude-haiku-4.5",
+        name="Claude Haiku 4.5",
+        provider="anthropic",
+        context_length=200_000,
+        cost_per_million_input=1.0,
+        cost_per_million_output=5.0,
+        speed_rating=8,
         quality_rating=7,
         best_for=[
-            TaskType.QUICK_ANSWER,
             TaskType.QUERY_CLASSIFICATION,
-            TaskType.DEEP_RESEARCH,  # Added for emergency research
+            TaskType.QUICK_ANSWER,
+            TaskType.SENTIMENT_ANALYSIS,
         ],
         temperature=0.2,
-    ),
-    # Specialized models
-    "xai/grok-4": ModelProfile(
-        model_id="xai/grok-4",
-        name="Grok 4",
-        provider="xai",
-        context_length=128000,
-        cost_per_million_input=3.0,
-        cost_per_million_output=12.0,
-        speed_rating=7,
-        quality_rating=9,
-        best_for=[
-            TaskType.MARKET_ANALYSIS,
-            TaskType.SENTIMENT_ANALYSIS,
-            TaskType.PORTFOLIO_OPTIMIZATION,
-        ],
-        temperature=0.3,
     ),
 }
 
@@ -305,19 +291,46 @@ class OpenRouterProvider:
         # Track usage
         self._track_usage(model_id, task_type)
 
-        # Create LangChain ChatOpenAI instance
-        return ChatOpenAI(
-            model=model_id,
-            temperature=final_temperature,
-            max_tokens=max_tokens,
-            openai_api_base=self.base_url,
-            openai_api_key=self.api_key,
-            default_headers={
-                "HTTP-Referer": "https://github.com/wshobson/maverick-mcp",
-                "X-Title": "Maverick MCP",
-            },
-            streaming=True,
+        def _make_llm(mid: str, temp: float) -> ChatOpenAI:
+            return ChatOpenAI(
+                model=mid,
+                temperature=temp,
+                max_tokens=max_tokens,
+                openai_api_base=self.base_url,
+                openai_api_key=self.api_key,
+                default_headers={
+                    "HTTP-Referer": "https://github.com/wshobson/maverick-mcp",
+                    "X-Title": "Maverick MCP",
+                },
+                streaming=True,
+            )
+
+        primary_llm = _make_llm(model_id, final_temperature)
+
+        # For override/emergency mode, return directly (no fallback chain needed)
+        if model_override or (timeout_budget is not None and timeout_budget < 30):
+            return primary_llm
+
+        # Build fallback chain so region-restricted models are skipped automatically
+        ranked_profiles = self._select_model_ranked(
+            task_type, prefer_fast, prefer_cheap, prefer_quality, top_n=4
         )
+        fallback_llms = [
+            _make_llm(p.model_id, p.temperature)
+            for p in ranked_profiles
+            if p.model_id != model_id
+        ]
+
+        if fallback_llms:
+            logger.debug(
+                f"Fallback chain: {[p.model_id for p in ranked_profiles if p.model_id != model_id]}"
+            )
+            return primary_llm.with_fallbacks(
+                fallback_llms,
+                exceptions_to_handle=_REGION_ERRORS,
+            )
+
+        return primary_llm
 
     def _select_model(
         self,
@@ -346,7 +359,7 @@ class OpenRouterProvider:
 
         if not candidates:
             # Fallback to GPT-5 Nano for general tasks
-            return MODEL_PROFILES["openai/gpt-5-nano"]
+            return MODEL_PROFILES["google/gemini-2.5-flash"]
 
         # Score and rank candidates
         scored_candidates = []
@@ -402,6 +415,53 @@ class OpenRouterProvider:
         scored_candidates.sort(key=lambda x: x[0], reverse=True)
         return scored_candidates[0][1]
 
+    def _select_model_ranked(
+        self,
+        task_type: TaskType,
+        prefer_fast: bool = False,
+        prefer_cheap: bool = True,
+        prefer_quality: bool = False,
+        top_n: int = 3,
+    ) -> list[ModelProfile]:
+        """Return top-N ranked model profiles for use as primary + fallbacks."""
+        candidates = []
+        for profile in MODEL_PROFILES.values():
+            if task_type in profile.best_for or task_type == TaskType.GENERAL:
+                candidates.append(profile)
+
+        if not candidates:
+            return [MODEL_PROFILES["openai/gpt-5-nano"]]
+
+        scored_candidates = []
+        for profile in candidates:
+            score = 0
+            avg_cost = (
+                profile.cost_per_million_input + profile.cost_per_million_output
+            ) / 2
+            if prefer_quality:
+                score += profile.quality_rating * 20
+                if task_type in profile.best_for:
+                    score += 40
+                score += max(0, 20 - avg_cost)
+            else:
+                cost_efficiency = profile.quality_rating / max(1, avg_cost)
+                score += cost_efficiency * 30
+                if task_type in profile.best_for:
+                    score += 25
+                score += profile.quality_rating * 5
+                if prefer_fast:
+                    score += profile.speed_rating * 5
+                else:
+                    score += profile.speed_rating * 2
+                if prefer_cheap:
+                    score += max(0, 100 - avg_cost * 5)
+                else:
+                    score += max(0, 60 - avg_cost * 3)
+            scored_candidates.append((score, profile))
+
+        scored_candidates.sort(key=lambda x: x[0], reverse=True)
+        return [p for _, p in scored_candidates[:top_n]]
+
     def _select_emergency_model(
         self, task_type: TaskType, timeout_budget: float
     ) -> ModelProfile:
@@ -417,31 +477,20 @@ class OpenRouterProvider:
         Returns:
             Fastest available model profile
         """
-        # Emergency model priority (by actual tokens per second)
+        # Emergency model priority (speed first)
 
-        # For ultra-tight budgets (< 15s), use only the absolute fastest
-        if timeout_budget < 15:
+        # < 25s: absolute fastest
+        if timeout_budget < 25:
             return MODEL_PROFILES["google/gemini-2.5-flash"]
 
-        # For tight budgets (< 25s), use fastest available models
-        if timeout_budget < 25:
-            if task_type in [TaskType.SENTIMENT_ANALYSIS, TaskType.QUICK_ANSWER]:
-                return MODEL_PROFILES[
-                    "google/gemini-2.5-flash"
-                ]  # Fastest for all tasks
-            return MODEL_PROFILES["openai/gpt-4o-mini"]  # Speed + quality balance
-
-        # For moderate emergency (< 30s), use speed-optimized models for complex tasks
+        # < 30s: task-aware fast selection
         if task_type in [
             TaskType.DEEP_RESEARCH,
             TaskType.MARKET_ANALYSIS,
             TaskType.TECHNICAL_ANALYSIS,
         ]:
-            return MODEL_PROFILES[
-                "openai/gpt-4o-mini"
-            ]  # Best speed/quality for research
+            return MODEL_PROFILES["google/gemini-3-flash-preview"]  # Fast + capable
 
-        # Default to fastest model
         return MODEL_PROFILES["google/gemini-2.5-flash"]
 
     def _track_usage(self, model_id: str, task_type: TaskType):

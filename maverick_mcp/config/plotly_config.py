@@ -40,11 +40,9 @@ def configure_plotly_defaults() -> None:
         # Configure additional defaults that don't trigger deprecation warnings
         if hasattr(pio.defaults, "mathjax"):
             pio.defaults.mathjax = None
-        if hasattr(pio.defaults, "plotlyjs"):
-            pio.defaults.plotlyjs = "auto"
 
-        # Note: We avoid setting kaleido.scope properties directly to prevent warnings
-        # The modern pio.defaults API should be used instead
+        # Note: Do not set plotlyjs here — kaleido expects a URL or file path,
+        # not "auto". Leave it unset so kaleido uses its bundled plotly.js.
 
         logger.info("✓ Plotly defaults configured successfully")
 

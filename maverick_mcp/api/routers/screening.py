@@ -165,6 +165,7 @@ def get_all_screening_recommendations() -> dict[str, Any]:
 def get_screening_by_criteria(
     min_momentum_score: float | str | None = None,
     min_volume: int | str | None = None,
+    min_price: float | str | None = None,
     max_price: float | str | None = None,
     sector: str | None = None,
     limit: int | str = 20,
@@ -181,6 +182,7 @@ def get_screening_by_criteria(
     Args:
         min_momentum_score: Minimum momentum score rating (0-100)
         min_volume: Minimum average daily volume
+        min_price: Minimum stock price
         max_price: Maximum stock price
         sector: Specific sector to filter (e.g., "Technology")
         limit: Maximum number of results
@@ -196,6 +198,8 @@ def get_screening_by_criteria(
             min_momentum_score = float(min_momentum_score)
         if min_volume is not None:
             min_volume = int(min_volume)
+        if min_price is not None:
+            min_price = float(min_price)
         if max_price is not None:
             max_price = float(max_price)
         if isinstance(limit, str):
@@ -211,6 +215,9 @@ def get_screening_by_criteria(
 
             if min_volume:
                 query = query.filter(MaverickStocks.avg_vol_30d >= min_volume)
+
+            if min_price:
+                query = query.filter(MaverickStocks.close_price >= min_price)
 
             if max_price:
                 query = query.filter(MaverickStocks.close_price <= max_price)
@@ -229,6 +236,7 @@ def get_screening_by_criteria(
                 "criteria": {
                     "min_momentum_score": min_momentum_score,
                     "min_volume": min_volume,
+                    "min_price": min_price,
                     "max_price": max_price,
                     "sector": sector,
                 },

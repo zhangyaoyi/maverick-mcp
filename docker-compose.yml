@@ -4,10 +4,10 @@ services:
   backend:
     build: .
     ports:
-      - "${API_PORT}:8000"
+      - "${API_PORT:-8003}:8000"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-localhost}:5432/${POSTGRES_DB}
-      - REDIS_HOST=${REDIS_HOST:-localhost}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB}
+      - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       # Required API Keys
       - TIINGO_API_KEY=${TIINGO_API_KEY}

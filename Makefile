@@ -1,7 +1,7 @@
 # Maverick-MCP Makefile
 # Central command interface for agent-friendly development
 
-.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies lint format typecheck clean tail-log backend check migrate setup redis-start redis-stop experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs
+.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies lint format typecheck clean tail-log backend check migrate setup redis-start redis-stop experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs docker-infra-up docker-infra-down
 
 # Default target
 help:
@@ -41,8 +41,10 @@ help:
 	@echo "  make setup        - Initial project setup"
 	@echo "  make clean        - Clean up generated files"
 	@echo ""
-	@echo "  make docker-up    - Start with Docker"
-	@echo "  make docker-down  - Stop Docker services"
+	@echo "  make docker-infra-up  - Start infrastructure (Postgres + Redis)"
+	@echo "  make docker-infra-down - Stop infrastructure"
+	@echo "  make docker-up    - Start app (requires infra running)"
+	@echo "  make docker-down  - Stop app services"
 	@echo "  make docker-logs  - View Docker logs"
 
 # Development commands
@@ -227,14 +229,22 @@ benchmark-speed:
 
 
 # Docker commands
-docker-up:
-	@echo "Starting Docker services..."
-	@docker-compose up --build -d
+docker-infra-up:
+	@echo "Starting infrastructure (Postgres + Redis)..."
+	@docker compose -f docker-compose.infra.yml up -d
+
+docker-infra-down:
+	@echo "Stopping infrastructure..."
+	@docker compose -f docker-compose.infra.yml down
+
+docker-up: docker-infra-up
+	@echo "Starting app services..."
+	@docker compose up --build -d
 
 docker-down:
-	@echo "Stopping Docker services..."
-	@docker-compose down
+	@echo "Stopping app services..."
+	@docker compose down
 
 docker-logs:
 	@echo "Following Docker logs (Ctrl+C to stop)..."
-	@docker-compose logs -f
+	@docker compose logs -f

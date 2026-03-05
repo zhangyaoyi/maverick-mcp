@@ -197,13 +197,13 @@ def get_finviz_movers(mover_type: str = "gainers", limit: int = 50) -> list[str]
         }
     elif mover_type == "active":
         filters_dict = {
-            "Average Volume": "Over 20M",  # Very high volume
+            "Average Volume": "Over 2M",  # Very high volume
             "Price": "Over $5",
         }
     else:
         # Default to liquid stocks
         filters_dict = {
-            "Average Volume": "Over 10M",
+            "Average Volume": "Over 2M",
             "Market Cap.": "Large (>10bln)",
             "Price": "Over $10",
         }

@@ -158,9 +158,17 @@ class StatusDashboard:
 
         return summary
 
+    def _normalize_resource_usage(self, resource_usage: Any) -> dict[str, Any]:
+        """Convert ResourceUsage model or dict to a plain dict."""
+        if hasattr(resource_usage, "model_dump"):
+            return resource_usage.model_dump()
+        return resource_usage if isinstance(resource_usage, dict) else {}
+
     def _build_resource_summary(self, health_status: dict[str, Any]) -> dict[str, Any]:
         """Build resource usage summary."""
-        resource_usage = health_status.get("resource_usage", {})
+        resource_usage = self._normalize_resource_usage(
+            health_status.get("resource_usage", {})
+        )
 
         return {
             "cpu_percent": resource_usage.get("cpu_percent", 0),
@@ -178,7 +186,9 @@ class StatusDashboard:
     ) -> dict[str, Any]:
         """Calculate performance and availability metrics."""
         components = health_status.get("components", {})
-        resource_usage = health_status.get("resource_usage", {})
+        resource_usage = self._normalize_resource_usage(
+            health_status.get("resource_usage", {})
+        )
 
         # Calculate average response time
         response_times = [
@@ -324,7 +334,9 @@ class StatusDashboard:
             )
 
         # Check resource usage
-        resource_usage = health_status.get("resource_usage", {})
+        resource_usage = self._normalize_resource_usage(
+            health_status.get("resource_usage", {})
+        )
 
         if resource_usage.get("cpu_percent", 0) > self.alert_thresholds["cpu_usage"]:
             alerts.append(
@@ -413,10 +425,12 @@ class StatusDashboard:
             "health_score": metrics.get("system_health_score", 0),
             "availability": metrics.get("availability_percentage", 0),
             "response_time": metrics.get("average_response_time_ms", 0),
-            "cpu_usage": health_status.get("resource_usage", {}).get("cpu_percent", 0),
-            "memory_usage": health_status.get("resource_usage", {}).get(
-                "memory_percent", 0
-            ),
+            "cpu_usage": self._normalize_resource_usage(
+                health_status.get("resource_usage", {})
+            ).get("cpu_percent", 0),
+            "memory_usage": self._normalize_resource_usage(
+                health_status.get("resource_usage", {})
+            ).get("memory_percent", 0),
             "circuit_breaker_health": metrics.get("circuit_breaker_health", 100),
         }
 

@@ -116,7 +116,11 @@
       "TodoWrite",
       "NotebookRead",
       "NotebookEdit",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(launchctl list)",
+      "Bash(launchctl list:*)",
+      "Bash(launchctl:*)",
+      "Bash(/Users/overman/.local/bin/uv run:*)"
     ],
     "deny": [
       "Bash(rm -rf /)",

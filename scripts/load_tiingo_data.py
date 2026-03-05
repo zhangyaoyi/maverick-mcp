@@ -829,7 +829,7 @@ def get_sp500_symbols() -> list[str]:
         # Provide text object to read_html to avoid direct requests by pandas
         tables = pd.read_html(StringIO(response.text))
         sp500_table = tables[0]  # First table contains the S&P 500 list
-        symbols = sp500_table["Symbol"].tolist()
+        symbols = [s.replace(".", "-") for s in sp500_table["Symbol"].tolist()]
         logger.info(f"Fetched {len(symbols)} S&P 500 symbols from Wikipedia")
 
         # Optional: Save to cache file for future use

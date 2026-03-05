@@ -16,15 +16,14 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/overman/.local/bin/uv</string>
+        <string>/opt/homebrew/bin/uv</string>
         <string>run</string>
         <string>--env-file</string>
         <string>/Users/overman/projects/maverick-mcp/.env</string>
         <string>scripts/load_tiingo_data.py</string>
         <string>--sp500</string>
         <string>--years</string>
-        <!-- 约1个多月数据，适合每日增量更新 -->
-        <string>0.1</string>
+        <string>1</string>
         <string>--run-screening</string>
     </array>
 
@@ -58,9 +57,7 @@
         </dict>
     </array>
 
-    <key>StandardOutPath</key>
-    <string>/Users/overman/projects/maverick-mcp/logs/tiingo.daily.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/overman/projects/maverick-mcp/logs/tiingo.daily.err.log</string>
+    <string>/Users/overman/projects/maverick-mcp/logs/tiingo.daily.log</string>
 </dict>
 </plist>

@@ -1284,10 +1284,19 @@ if __name__ == "__main__":
 
         shutdown_handler.register_cleanup(close_cache)
 
+        def _run_mcp(**kwargs: Any) -> None:
+            """Run mcp.run(), suppressing ClosedResourceError from client disconnects."""
+            import anyio
+
+            try:
+                mcp.run(**kwargs)
+            except* anyio.ClosedResourceError:
+                logger.debug("Client disconnected during request handling (expected)")
+
         # Run with the appropriate transport
         if args.transport == "stdio":
             logger.info(f"Starting {settings.app_name} server with stdio transport")
-            mcp.run(
+            _run_mcp(
                 transport="stdio",
                 debug=settings.api.debug,
                 log_level=settings.api.log_level.upper(),
@@ -1296,7 +1305,7 @@ if __name__ == "__main__":
             logger.info(
                 f"Starting {settings.app_name} server with streamable-http transport on http://{args.host}:{args.port}"
             )
-            mcp.run(
+            _run_mcp(
                 transport="streamable-http",
                 port=args.port,
                 host=args.host,
@@ -1305,7 +1314,7 @@ if __name__ == "__main__":
             logger.info(
                 f"Starting {settings.app_name} server with SSE transport on http://{args.host}:{args.port}"
             )
-            mcp.run(
+            _run_mcp(
                 transport="sse",
                 port=args.port,
                 host=args.host,

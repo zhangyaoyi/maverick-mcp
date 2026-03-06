@@ -7,6 +7,7 @@ for accessing Qwen and other models with automatic model selection based on task
 import logging
 from typing import Any
 
+import httpx
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
@@ -101,7 +102,7 @@ class BailianProvider:
 
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.base_url = "https://coding.dashscope.aliyuncs.com/v1"
 
     def get_llm(
         self,
@@ -143,24 +144,37 @@ class BailianProvider:
         logger.info(
             "Using Bailian (Aliyun) with model: %s for task: %s", model_id, task_type
         )
+        logger.debug(
+            "[Bailian] model=%s task=%s temperature=%.2f max_tokens=%d base_url=%s",
+            model_id,
+            task_type,
+            final_temperature,
+            max_tokens,
+            self.base_url,
+        )
 
         def _make_llm(mid: str, temp: float) -> ChatOpenAI:
+            logger.debug("[Bailian] Creating ChatOpenAI instance: model=%s temperature=%.2f", mid, temp)
+            # Bypass system proxy (SOCKS/HTTP) — Aliyun endpoint is directly reachable
             return ChatOpenAI(
                 model=mid,
                 temperature=temp,
                 max_tokens=max_tokens,
-                openai_api_base=self.base_url,
-                openai_api_key=self.api_key,
+                base_url=self.base_url,
+                api_key=self.api_key,
                 streaming=True,
+                http_client=httpx.Client(trust_env=False),
+                http_async_client=httpx.AsyncClient(trust_env=False),
             )
 
         primary_llm = _make_llm(model_id, final_temperature)
 
         # Build fallback chain from remaining models in priority order
+        fallback_order = [mid for mid in _FALLBACK_ORDER if mid != model_id and mid in BAILIAN_MODEL_PROFILES]
+        logger.debug("[Bailian] Fallback chain: %s", fallback_order)
         fallback_llms = [
             _make_llm(mid, BAILIAN_MODEL_PROFILES[mid].temperature)
-            for mid in _FALLBACK_ORDER
-            if mid != model_id and mid in BAILIAN_MODEL_PROFILES
+            for mid in fallback_order
         ]
 
         if fallback_llms:

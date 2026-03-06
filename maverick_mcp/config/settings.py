@@ -50,7 +50,10 @@ class APISettings(BaseModel):
     host: str = Field(default="127.0.0.1", description="API host")
     port: int = Field(default=8000, description="API port")
     debug: bool = Field(default=False, description="Debug mode")
-    log_level: str = Field(default="info", description="Log level")
+    log_level: str = Field(
+        default_factory=lambda: os.getenv("LOG_LEVEL", "info").lower(),
+        description="Log level",
+    )
     cache_timeout: int = Field(default=300, description="Cache timeout in seconds")
     cors_origins: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:3001"],
@@ -945,9 +948,10 @@ def get_settings() -> Settings:
     # Override with environment-specific settings if needed
     if settings.environment == "production":
         # Apply production-specific settings
-        # e.g., disable debug mode, set higher rate limits, etc.
         settings.api.debug = False
-        settings.api.log_level = "warning"
+        # Only default to warning if LOG_LEVEL is not explicitly set
+        if not os.getenv("LOG_LEVEL"):
+            settings.api.log_level = "warning"
         settings.data_provider.rate_limit = 20
 
     return settings

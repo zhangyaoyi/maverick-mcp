@@ -5,6 +5,7 @@ Orchestrates multiple specialized agents with intelligent routing, result synthe
 and conflict resolution for comprehensive financial analysis.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -766,38 +767,101 @@ class SupervisorAgent(PersonaAwareAgent):
             update={"execution_plan": execution_plan, "workflow_status": "planning"},
         )
 
-    async def _route_to_agents(self, state: SupervisorState) -> Command:
-        """Route query to appropriate agents based on execution plan."""
-        return Command(
-            goto="parallel_execution", update={"workflow_status": "executing"}
-        )
+    async def _route_to_agents(self, state: SupervisorState) -> dict:
+        """Mark workflow as executing; routing is handled by add_conditional_edges."""
+        return {"workflow_status": "executing"}
 
     async def _route_decision(self, state: SupervisorState) -> str:
         """Decide routing strategy based on state."""
         classification = state.get("query_classification", {})
-        required_agents = classification.get("required_agents", ["market"])
-        parallel = classification.get("parallel_capable", False)
+        routing_config = classification.get("routing_config", {})
 
-        if len(required_agents) == 1:
-            agent = required_agents[0]
-            if agent == "market" and self.market_agent:
-                return "market_only"
-            elif agent == "technical" and self.technical_agent:
-                return "technical_only"
-            elif agent == "research" and self.research_agent:
-                return "research_only"
-        elif len(required_agents) > 1 and parallel:
+        # Resolve which internal agents are actually requested
+        requested = set(routing_config.get("agents", []))
+        parallel = routing_config.get("parallel", False) or classification.get(
+            "parallel_capable", False
+        )
+
+        available_in_request = []
+        if "market" in requested and self.market_agent:
+            available_in_request.append("market")
+        if "technical" in requested and self.technical_agent:
+            available_in_request.append("technical")
+        if "research" in requested and self.research_agent:
+            available_in_request.append("research")
+
+        if len(available_in_request) >= 2 and parallel:
             return "parallel_execution"
+        if len(available_in_request) == 1:
+            agent = available_in_request[0]
+            if agent == "market":
+                return "market_only"
+            if agent == "technical":
+                return "technical_only"
+            if agent == "research":
+                return "research_only"
+
+        # Fall back to whichever single agent is available
+        if self.market_agent:
+            return "market_only"
+        if self.technical_agent:
+            return "technical_only"
 
         return "synthesize"
 
-    async def _parallel_coordinator(self, state: SupervisorState) -> Command:
+    async def _parallel_coordinator(self, state: SupervisorState) -> dict:
         """Coordinate parallel execution of multiple agents."""
-        # This would implement parallel agent coordination
-        # For now, return to aggregation
-        return Command(
-            goto="aggregate_results", update={"workflow_status": "aggregating"}
+        query = state["messages"][-1].content if state["messages"] else ""
+        session_id = state.get("session_id", "default")
+        classification = state.get("query_classification", {})
+        routing_config = classification.get("routing_config", {})
+        requested = set(routing_config.get("agents", ["market"]))
+
+        tasks: list[Any] = []
+        names: list[str] = []
+        if "market" in requested and self.market_agent:
+            tasks.append(
+                self.market_agent.analyze_market(query=query, session_id=session_id)
+            )
+            names.append("market")
+        if "technical" in requested and self.technical_agent:
+            tasks.append(
+                self.technical_agent.analyze(query=query, session_id=session_id)
+            )
+            names.append("technical")
+        if "research" in requested and self.research_agent:
+            tasks.append(
+                self.research_agent.research_topic(
+                    query=query, session_id=session_id, research_scope="standard"
+                )
+            )
+            names.append("research")
+
+        agent_results: dict[str, Any] = {}
+        active_agents: list[str] = []
+        agent_errors: dict[str, str] = {}
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for name, result in zip(names, results):
+                if isinstance(result, Exception):
+                    logger.error("[parallel_coordinator] %s failed: %s", name, result)
+                    agent_errors[name] = str(result)
+                else:
+                    agent_results[name] = result
+                    active_agents.append(name)
+
+        logger.info(
+            "[parallel_coordinator] completed: agents=%s errors=%s",
+            active_agents,
+            list(agent_errors.keys()),
         )
+        return {
+            "agent_results": agent_results,
+            "active_agents": active_agents,
+            "agent_errors": agent_errors,
+            "workflow_status": "aggregating",
+        }
 
     async def _invoke_market_agent(self, state: SupervisorState) -> Command:
         """Invoke market analysis agent."""
@@ -854,11 +918,16 @@ class SupervisorAgent(PersonaAwareAgent):
         # Future implementation
         return Command(goto="aggregate_results", update={"active_agents": ["research"]})
 
-    async def _aggregate_results(self, state: SupervisorState) -> Command:
+    async def _aggregate_results(self, state: SupervisorState) -> dict:
         """Aggregate results from all agents."""
-        return Command(
-            goto="synthesize_response", update={"workflow_status": "synthesizing"}
+        agent_results = state.get("agent_results", {})
+        active_agents = state.get("active_agents", [])
+        logger.info(
+            "[aggregate_results] agents=%s results_keys=%s",
+            active_agents,
+            list(agent_results.keys()),
         )
+        return {"workflow_status": "synthesizing"}
 
     def _check_conflicts(self, state: SupervisorState) -> str:
         """Check if there are conflicts between agent results."""

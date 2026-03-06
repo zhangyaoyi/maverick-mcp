@@ -125,7 +125,7 @@ class TestBailianProviderModelSelection(unittest.TestCase):
         self.provider.get_llm()
 
         first_call_kwargs = mock_chat.call_args_list[0].kwargs
-        self.assertIn("dashscope.aliyuncs.com", first_call_kwargs["openai_api_base"])
+        self.assertIn("coding.dashscope.aliyuncs.com", first_call_kwargs["base_url"])
 
     @patch("maverick_mcp.providers.bailian_provider.ChatOpenAI")
     def test_api_key_passed_to_client(self, mock_chat):
@@ -136,7 +136,7 @@ class TestBailianProviderModelSelection(unittest.TestCase):
         self.provider.get_llm()
 
         first_call_kwargs = mock_chat.call_args_list[0].kwargs
-        self.assertEqual(first_call_kwargs["openai_api_key"], "test-key")
+        self.assertEqual(first_call_kwargs["api_key"], "test-key")
 
     @patch("maverick_mcp.providers.bailian_provider.ChatOpenAI")
     def test_fallback_chain_built(self, mock_chat):

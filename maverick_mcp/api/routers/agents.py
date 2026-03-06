@@ -199,6 +199,7 @@ async def orchestrated_analysis(
     max_agents: int = 3,
     parallel_execution: bool = True,
     session_id: str | None = None,
+    tickers: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Run orchestrated multi-agent analysis using the SupervisorAgent.
@@ -227,9 +228,15 @@ async def orchestrated_analysis(
         # Get supervisor agent
         supervisor = get_or_create_agent("supervisor", persona)
 
+        # Embed tickers into query if provided
+        effective_query = query
+        if tickers:
+            ticker_str = ", ".join(tickers)
+            effective_query = f"{query} (focus on: {ticker_str})"
+
         # Run orchestrated analysis
         result = await supervisor.coordinate_agents(
-            query=query,
+            query=effective_query,
             session_id=session_id,
             routing_strategy=routing_strategy,
             max_agents=max_agents,
@@ -237,15 +244,16 @@ async def orchestrated_analysis(
         )
 
         return {
+            **result,
             "status": "success",
             "agent_type": "supervisor_orchestrated",
             "persona": persona,
             "session_id": session_id,
             "routing_strategy": routing_strategy,
+            "tickers": tickers or [],
             "agents_used": result.get("agents_used", []),
             "execution_time_ms": result.get("execution_time_ms"),
             "synthesis_confidence": result.get("synthesis_confidence"),
-            **result,
         }
 
     except Exception as e:

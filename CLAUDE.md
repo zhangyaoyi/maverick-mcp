@@ -130,7 +130,6 @@ make setup            # Initial setup
 
 # Utilities
 make clean            # Clean up generated files
-make redis-start      # Start Redis (if using caching)
 
 # Quick shortcuts
 make d                # Alias for make dev
@@ -590,9 +589,6 @@ make migrate
 # Install and start Redis
 brew install redis
 brew services start redis
-
-# Or use make command
-make redis-start
 
 # Server automatically detects Redis and uses it
 ```

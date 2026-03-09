@@ -1,7 +1,7 @@
 # Maverick-MCP Makefile
 # Central command interface for agent-friendly development
 
-.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies test-portfolio-ledger lint format typecheck clean tail-log backend check migrate migrate-dev migrate-test migrate-prod migrate-all setup create-dev-db create-dbs redis-start redis-stop experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs docker-infra-up docker-infra-down infra-up infra-down infra-reset db-sync
+.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies test-portfolio-ledger lint format typecheck clean tail-log backend check migrate migrate-dev migrate-test migrate-prod migrate-all setup create-dev-db create-dbs experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs docker-infra-up docker-infra-down infra-up infra-down infra-reset db-sync
 
 # Default target
 help:
@@ -228,23 +228,6 @@ clean:
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete
 	@echo "Cleanup complete."
-
-# Service management
-redis-start:
-	@echo "Starting Redis..."
-	@if command -v brew &> /dev/null; then \
-		brew services start redis; \
-	else \
-		redis-server --daemonize yes; \
-	fi
-
-redis-stop:
-	@echo "Stopping Redis..."
-	@if command -v brew &> /dev/null; then \
-		brew services stop redis; \
-	else \
-		pkill redis-server || true; \
-	fi
 
 # Quick shortcuts
 d: dev

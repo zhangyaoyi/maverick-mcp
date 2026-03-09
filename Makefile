@@ -1,7 +1,7 @@
 # Maverick-MCP Makefile
 # Central command interface for agent-friendly development
 
-.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies test-portfolio-ledger lint format typecheck clean tail-log backend check migrate migrate-dev migrate-test migrate-prod migrate-all setup create-dev-db create-dbs redis-start redis-stop experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs docker-infra-up docker-infra-down infra-up infra-down infra-reset
+.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies test-portfolio-ledger lint format typecheck clean tail-log backend check migrate migrate-dev migrate-test migrate-prod migrate-all setup create-dev-db create-dbs redis-start redis-stop experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs docker-infra-up docker-infra-down infra-up infra-down infra-reset db-sync
 
 # Default target
 help:
@@ -43,6 +43,7 @@ help:
 	@echo "  make setup        - Initial project setup"
 	@echo "  make clean        - Clean up generated files"
 	@echo ""
+	@echo "  make db-sync      - Copy prod DB data → dev and test (drops & recreates)"
 	@echo "  make infra-up     - Start infrastructure (Postgres + Redis) with --env-file .env"
 	@echo "  make infra-down   - Stop infrastructure"
 	@echo "  make infra-reset  - Wipe volumes and restart infrastructure"
@@ -289,6 +290,11 @@ infra-reset:
 	@docker compose --env-file .env -f docker-compose.infra.yml down -v
 	@docker compose --env-file .env -f docker-compose.infra.yml up -d
 	@$(MAKE) --no-print-directory create-dbs
+
+db-sync:
+	@echo "Syncing prod → dev, test..."
+	@POSTGRES_USER=$$(grep ^POSTGRES_USER .env 2>/dev/null | cut -d= -f2 || echo postgres) \
+	 ./scripts/sync-db.sh
 
 # Docker commands
 docker-infra-up:

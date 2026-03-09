@@ -4,7 +4,6 @@ This avoids Claude Desktop's issue with mounted router tool names.
 """
 
 import logging
-from datetime import datetime
 
 from fastmcp import FastMCP
 
@@ -198,161 +197,6 @@ def register_performance_tools(mcp: FastMCP) -> None:
     mcp.tool(name="performance_clear_system_caches")(clear_system_caches)
 
 
-def register_agent_tools(mcp: FastMCP) -> None:
-    """Register agent tools directly on main server if available"""
-    try:
-        from maverick_mcp.api.routers.agents import (
-            analyze_market_with_agent,
-            compare_multi_agent_analysis,
-            compare_personas_analysis,
-            deep_research_financial,
-            get_agent_streaming_analysis,
-            list_available_agents,
-            orchestrated_analysis,
-        )
-
-        # Original agent tools
-        mcp.tool(name="agents_analyze_market_with_agent")(analyze_market_with_agent)
-        mcp.tool(name="agents_get_agent_streaming_analysis")(
-            get_agent_streaming_analysis
-        )
-        mcp.tool(name="agents_list_available_agents")(list_available_agents)
-        mcp.tool(name="agents_compare_personas_analysis")(compare_personas_analysis)
-
-        # New orchestration tools
-        mcp.tool(name="agents_orchestrated_analysis")(orchestrated_analysis)
-        mcp.tool(name="agents_deep_research_financial")(deep_research_financial)
-        mcp.tool(name="agents_compare_multi_agent_analysis")(
-            compare_multi_agent_analysis
-        )
-    except ImportError:
-        # Agents module not available
-        pass
-
-
-def register_research_tools(mcp: FastMCP) -> None:
-    """Register deep research tools directly on main server"""
-    try:
-        # Import all research tools from the consolidated research module
-        from maverick_mcp.api.routers.research import (
-            analyze_market_sentiment,
-            company_comprehensive_research,
-            comprehensive_research,
-            get_research_agent,
-        )
-
-        # Register comprehensive research tool with all enhanced features
-        @mcp.tool(name="research_comprehensive_research")
-        async def research_comprehensive(
-            query: str,
-            persona: str | None = "moderate",
-            research_scope: str | None = "standard",
-            max_sources: int | None = 10,
-            timeframe: str | None = "1m",
-        ) -> dict:
-            """
-            Perform comprehensive research on any financial topic using web search and AI analysis.
-
-            Enhanced version with:
-            - Adaptive timeout based on research scope (basic: 15s, standard: 30s, comprehensive: 60s, exhaustive: 90s)
-            - Step-by-step logging for debugging
-            - Guaranteed responses to Claude Desktop
-            - Optimized parallel execution for faster results
-
-            Perfect for researching stocks, sectors, market trends, company analysis.
-            """
-            return await comprehensive_research(
-                query=query,
-                persona=persona or "moderate",
-                research_scope=research_scope or "standard",
-                max_sources=min(
-                    max_sources or 25, 25
-                ),  # Increased cap due to adaptive timeout
-                timeframe=timeframe or "1m",
-            )
-
-        # Enhanced sentiment analysis (imported above)
-        @mcp.tool(name="research_analyze_market_sentiment")
-        async def analyze_market_sentiment_tool(
-            topic: str,
-            timeframe: str | None = "1w",
-            persona: str | None = "moderate",
-        ) -> dict:
-            """
-            Analyze market sentiment for stocks, sectors, or market trends.
-
-            Enhanced version with:
-            - 20-second timeout protection
-            - Streamlined execution for speed
-            - Step-by-step logging for debugging
-            - Guaranteed responses
-            """
-            return await analyze_market_sentiment(
-                topic=topic,
-                timeframe=timeframe or "1w",
-                persona=persona or "moderate",
-            )
-
-        # Enhanced company research (imported above)
-
-        @mcp.tool(name="research_company_comprehensive")
-        async def research_company_comprehensive(
-            symbol: str,
-            include_competitive_analysis: bool = False,
-            persona: str | None = "moderate",
-        ) -> dict:
-            """
-            Perform comprehensive company research and fundamental analysis.
-
-            Enhanced version with:
-            - 20-second timeout protection to prevent hanging
-            - Streamlined analysis for faster execution
-            - Step-by-step logging for debugging
-            - Focus on core financial metrics
-            - Guaranteed responses to Claude Desktop
-            """
-            return await company_comprehensive_research(
-                symbol=symbol,
-                include_competitive_analysis=include_competitive_analysis or False,
-                persona=persona or "moderate",
-            )
-
-        @mcp.tool(name="research_search_financial_news")
-        async def search_financial_news(
-            query: str,
-            timeframe: str = "1w",
-            max_results: int = 20,
-            persona: str = "moderate",
-        ) -> dict:
-            """Search for recent financial news and analysis on any topic."""
-            agent = get_research_agent()
-
-            # Use basic research for news search
-            result = await agent.research_topic(
-                query=f"{query} news",
-                session_id=f"news_{datetime.now().timestamp()}",
-                research_scope="basic",
-                max_sources=max_results,
-                timeframe=timeframe,
-            )
-
-            return {
-                "success": True,
-                "query": query,
-                "news_results": result.get("processed_sources", [])[:max_results],
-                "total_found": len(result.get("processed_sources", [])),
-                "timeframe": timeframe,
-                "persona": persona,
-            }
-
-        logger.info("Successfully registered 4 research tools directly")
-
-    except ImportError as e:
-        logger.warning(f"Research module not available: {e}")
-    except Exception as e:
-        logger.error(f"Failed to register research tools: {e}")
-        # Don't raise - allow server to continue without research tools
-
 
 def register_backtesting_tools(mcp: FastMCP) -> None:
     """Register VectorBT backtesting tools directly on main server"""
@@ -428,22 +272,6 @@ def register_all_router_tools(mcp: FastMCP) -> None:
         logger.error(f"✗ Failed to register performance tools: {e}")
 
     try:
-        register_agent_tools(mcp)
-        logger.info("✓ Agent tools registered successfully")
-    except Exception as e:
-        logger.error(f"✗ Failed to register agent tools: {e}")
-
-    try:
-        # Import and register research tools on the main MCP instance
-        from maverick_mcp.api.routers.research import create_research_router
-
-        # Pass the main MCP instance to register tools directly on it
-        create_research_router(mcp)
-        logger.info("✓ Research tools registered successfully")
-    except Exception as e:
-        logger.error(f"✗ Failed to register research tools: {e}")
-
-    try:
         # Import and register health monitoring tools
         from maverick_mcp.api.routers.health_tools import register_health_tools
 
@@ -465,8 +293,6 @@ def register_all_router_tools(mcp: FastMCP) -> None:
     logger.info("   • Portfolio analysis tools")
     logger.info("   • Data retrieval tools")
     logger.info("   • Performance monitoring tools")
-    logger.info("   • Agent orchestration tools")
-    logger.info("   • Research and analysis tools")
     logger.info("   • Health monitoring tools")
     logger.info("   • Backtesting system tools")
     logger.info("   • MCP prompts for introspection")

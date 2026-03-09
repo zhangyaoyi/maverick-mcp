@@ -122,7 +122,12 @@
       "Bash(launchctl list)",
       "Bash(launchctl list:*)",
       "Bash(launchctl:*)",
-      "Bash(/Users/overman/.local/bin/uv run:*)"
+      "Bash(/Users/overman/.local/bin/uv run:*)",
+      "Bash(xargs ls:*)",
+      "Bash(for f in tests/test_error_handling.py tests/test_financial_search.py tests/test_mcp_orchestration_functional.py tests/test_orchestration_tools_simple.py tests/test_speed_optimization_validation.py tests/test_tavily_integration.py)",
+      "Bash(do)",
+      "Read(//Users/overman/projects/maverick-mcp/**)",
+      "Bash(done)"
     ],
     "deny": [
       "Bash(rm -rf /)",

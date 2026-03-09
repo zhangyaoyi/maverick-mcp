@@ -60,11 +60,6 @@ class APISettings(BaseModel):
         description="CORS allowed origins",
     )
 
-    # Web search API key
-    exa_api_key: str | None = Field(
-        default_factory=lambda: os.getenv("EXA_API_KEY"),
-        description="Exa API key",
-    )
 
 
 class DataProviderSettings(BaseModel):
@@ -78,17 +73,6 @@ class DataProviderSettings(BaseModel):
     )
     cache_expiry: int = Field(default=86400, description="Cache expiry in seconds")
     rate_limit: int = Field(default=5, description="Rate limit per minute")
-
-    # Research-specific settings
-    max_search_results: int = Field(
-        default=100, description="Max search results per query"
-    )
-    research_cache_ttl: int = Field(
-        default=3600, description="Research cache TTL in seconds"
-    )
-    content_max_length: int = Field(
-        default=2000, description="Max content length per source"
-    )
 
 
 class RedisSettings(BaseModel):

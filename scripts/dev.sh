@@ -25,16 +25,18 @@ else
     echo -e "${GREEN}No existing processes found on port 8003${NC}"
 fi
 
-# Check if Redis is running
-if ! pgrep -x "redis-server" > /dev/null; then
-    echo -e "${YELLOW}Starting Redis...${NC}"
-    if command -v brew &> /dev/null; then
+# Check if Redis is reachable (works with both native and Docker Redis)
+if ! nc -z localhost ${REDIS_PORT:-6379} 2>/dev/null; then
+    echo -e "${YELLOW}Redis not reachable on port ${REDIS_PORT:-6379}, attempting to start...${NC}"
+    if command -v brew &> /dev/null && brew list redis &>/dev/null; then
         brew services start redis
-    else
+    elif command -v redis-server &> /dev/null; then
         redis-server --daemonize yes
+    else
+        echo -e "${YELLOW}Redis not installed — continuing without caching (optional)${NC}"
     fi
 else
-    echo -e "${GREEN}Redis is already running${NC}"
+    echo -e "${GREEN}Redis is reachable on port ${REDIS_PORT:-6379}${NC}"
 fi
 
 # Function to cleanup on exit
@@ -59,6 +61,15 @@ echo -e "${YELLOW}Current directory: $(pwd)${NC}"
 # Source .env if it exists
 if [ -f .env ]; then
     source .env
+fi
+
+# Source .env.dev overrides if it exists (dev-specific config wins)
+if [ -f .env.dev ]; then
+    source .env.dev
+    echo -e "${GREEN}Loaded .env.dev overrides${NC}"
+elif [ -f .env.development ]; then
+    source .env.development
+    echo -e "${GREEN}Loaded .env.development overrides${NC}"
 fi
 
 # Check if uv is available (more relevant than python since we use uv run)

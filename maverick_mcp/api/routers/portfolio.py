@@ -17,8 +17,17 @@ import pandas_ta as ta
 from fastmcp import FastMCP
 from sqlalchemy.orm import Session
 
-from maverick_mcp.data.models import PortfolioPosition, UserPortfolio, get_db
+from maverick_mcp.data.models import (
+    PortfolioPosition,
+    PortfolioTransaction,
+    UserPortfolio,
+    get_db,
+)
 from maverick_mcp.domain.portfolio import Portfolio
+from maverick_mcp.api.services.portfolio_ledger_service import (
+    PortfolioLedgerService,
+    RecordTradeInput,
+)
 from maverick_mcp.providers.stock_data import StockDataProvider
 from maverick_mcp.utils.stock_helpers import get_stock_dataframe
 
@@ -686,58 +695,33 @@ def add_portfolio_position(
 
         db: Session = next(get_db())
         try:
-            # Get or create portfolio
+            ledger = PortfolioLedgerService(db)
+            ledger.record_trade(
+                user_id=user_id,
+                portfolio_name=portfolio_name,
+                payload=RecordTradeInput(
+                    ticker=ticker,
+                    side="BUY",
+                    quantity=Decimal(str(shares)),
+                    price=Decimal(str(purchase_price)),
+                    fee=Decimal("0"),
+                    trade_time=parsed_date,
+                    lot_method="AVG",
+                    notes=notes,
+                ),
+            )
+            db.commit()
+
             portfolio_db = (
                 db.query(UserPortfolio)
                 .filter_by(user_id=user_id, name=portfolio_name)
                 .first()
             )
-
-            if not portfolio_db:
-                portfolio_db = UserPortfolio(user_id=user_id, name=portfolio_name)
-                db.add(portfolio_db)
-                db.flush()
-
-            # Get existing position if any
-            existing_position = (
+            position_result = (
                 db.query(PortfolioPosition)
                 .filter_by(portfolio_id=portfolio_db.id, ticker=ticker.upper())
                 .first()
             )
-
-            total_cost = Decimal(str(shares)) * Decimal(str(purchase_price))
-
-            if existing_position:
-                # Update existing position (average cost basis)
-                old_total = (
-                    existing_position.shares * existing_position.average_cost_basis
-                )
-                new_total = old_total + total_cost
-                new_shares = existing_position.shares + Decimal(str(shares))
-                new_avg_cost = new_total / new_shares
-
-                existing_position.shares = new_shares
-                existing_position.average_cost_basis = new_avg_cost
-                existing_position.total_cost = new_total
-                existing_position.purchase_date = parsed_date
-                if notes:
-                    existing_position.notes = notes
-
-                position_result = existing_position
-            else:
-                # Create new position
-                position_result = PortfolioPosition(
-                    portfolio_id=portfolio_db.id,
-                    ticker=ticker.upper(),
-                    shares=Decimal(str(shares)),
-                    average_cost_basis=Decimal(str(purchase_price)),
-                    total_cost=total_cost,
-                    purchase_date=parsed_date,
-                    notes=notes,
-                )
-                db.add(position_result)
-
-            db.commit()
 
             return {
                 "status": "success",
@@ -805,6 +789,163 @@ def get_my_portfolio(
                     "message": f"No portfolio found for user '{user_id}' with name '{portfolio_name}'",
                     "positions": [],
                     "total_invested": 0.0,
+                }
+
+            transactions = (
+                db.query(PortfolioTransaction)
+                .filter_by(portfolio_id=portfolio_db.id)
+                .order_by(PortfolioTransaction.trade_time.asc(), PortfolioTransaction.created_at.asc())
+                .all()
+            )
+
+            # Ledger-first calculation path (fallback to legacy positions if no transactions)
+            if transactions:
+                ledger_positions: dict[str, dict[str, Any]] = {}
+                realized_pnl_total = Decimal("0")
+
+                for txn in transactions:
+                    ticker = txn.ticker.upper()
+                    pos = ledger_positions.setdefault(
+                        ticker,
+                        {
+                            "shares": Decimal("0"),
+                            "avg_cost": Decimal("0"),
+                            "total_cost": Decimal("0"),
+                            "realized": Decimal("0"),
+                            "first_purchase_date": txn.trade_time,
+                            "last_trade_date": txn.trade_time,
+                        },
+                    )
+
+                    qty = Decimal(str(txn.quantity))
+                    px = Decimal(str(txn.price))
+                    fee = Decimal(str(txn.fee or 0))
+                    pos["last_trade_date"] = txn.trade_time
+
+                    if txn.side.upper() == "BUY":
+                        buy_cost = qty * px + fee
+                        new_shares = pos["shares"] + qty
+                        new_total_cost = pos["total_cost"] + buy_cost
+                        pos["shares"] = new_shares
+                        pos["total_cost"] = new_total_cost
+                        pos["avg_cost"] = (
+                            new_total_cost / new_shares if new_shares > 0 else Decimal("0")
+                        )
+                    elif txn.side.upper() == "SELL":
+                        if qty > pos["shares"] or pos["shares"] <= 0:
+                            continue
+                        cost_basis = pos["avg_cost"] * qty
+                        proceeds = qty * px - fee
+                        realized = proceeds - cost_basis
+                        pos["realized"] += realized
+                        realized_pnl_total += realized
+                        remaining_shares = pos["shares"] - qty
+                        pos["shares"] = remaining_shares
+                        pos["total_cost"] = pos["avg_cost"] * remaining_shares
+
+                open_positions = {
+                    t: v for t, v in ledger_positions.items() if v["shares"] > 0
+                }
+
+                if not open_positions:
+                    return {
+                        "status": "success",
+                        "portfolio": {
+                            "name": portfolio_db.name,
+                            "user_id": portfolio_db.user_id,
+                            "created_at": portfolio_db.created_at.isoformat(),
+                        },
+                        "positions": [],
+                        "metrics": {
+                            "total_invested": 0.0,
+                            "total_current_value": 0.0,
+                            "total_unrealized_gain_loss": 0.0,
+                            "total_realized_gain_loss": float(realized_pnl_total),
+                            "total_return_percent": 0.0,
+                            "number_of_positions": 0,
+                        },
+                        "as_of": datetime.now(UTC).isoformat(),
+                    }
+
+                current_prices: dict[str, Decimal] = {}
+                if include_current_prices:
+                    for ticker in open_positions:
+                        try:
+                            df = stock_provider.get_stock_data(
+                                ticker,
+                                start_date=(datetime.now(UTC) - timedelta(days=7)).strftime(
+                                    "%Y-%m-%d"
+                                ),
+                                end_date=datetime.now(UTC).strftime("%Y-%m-%d"),
+                            )
+                            if not df.empty:
+                                price_col = "Close" if "Close" in df.columns else "close"
+                                current_prices[ticker] = Decimal(str(df[price_col].iloc[-1]))
+                        except Exception as e:
+                            logger.warning(f"Could not fetch price for {ticker}: {str(e)}")
+
+                positions_list = []
+                total_invested = Decimal("0")
+                total_current_value = Decimal("0")
+                total_unrealized = Decimal("0")
+
+                for ticker, pos in open_positions.items():
+                    invested = pos["total_cost"].quantize(Decimal("0.01"))
+                    total_invested += invested
+                    position_dict = {
+                        "ticker": ticker,
+                        "shares": float(pos["shares"]),
+                        "average_cost_basis": float(pos["avg_cost"]),
+                        "total_cost": float(invested),
+                        "purchase_date": pos["first_purchase_date"].isoformat(),
+                        "notes": None,
+                    }
+
+                    if ticker in current_prices:
+                        current_price = current_prices[ticker]
+                        current_value = (pos["shares"] * current_price).quantize(Decimal("0.01"))
+                        unrealized = (current_value - invested).quantize(Decimal("0.01"))
+                        total_current_value += current_value
+                        total_unrealized += unrealized
+
+                        position_dict["current_price"] = float(current_price)
+                        position_dict["current_value"] = float(current_value)
+                        position_dict["unrealized_gain_loss"] = float(unrealized)
+                        position_dict["unrealized_gain_loss_percent"] = (
+                            float(unrealized) / float(invested) * 100
+                            if invested > 0
+                            else 0.0
+                        )
+
+                    positions_list.append(position_dict)
+
+                if not include_current_prices:
+                    total_current_value = total_invested
+
+                total_return_percent = (
+                    float((total_unrealized + realized_pnl_total) / total_invested * 100)
+                    if total_invested > 0
+                    else 0.0
+                )
+
+                return {
+                    "status": "success",
+                    "portfolio": {
+                        "name": portfolio_db.name,
+                        "user_id": portfolio_db.user_id,
+                        "created_at": portfolio_db.created_at.isoformat(),
+                    },
+                    "positions": positions_list,
+                    "metrics": {
+                        "total_invested": float(total_invested),
+                        "total_current_value": float(total_current_value),
+                        "total_unrealized_gain_loss": float(total_unrealized),
+                        "total_realized_gain_loss": float(realized_pnl_total),
+                        "total_return_percent": total_return_percent,
+                        "number_of_positions": len(positions_list),
+                    },
+                    "as_of": datetime.now(UTC).isoformat(),
+                    "calculation_mode": "ledger_transactions",
                 }
 
             # Get all positions
@@ -965,12 +1106,7 @@ def remove_portfolio_position(
             }
 
         db: Session = next(get_db())
-        if shares is not None and shares <= 0:
-            return {"error": "Shares must be greater than zero", "status": "error"}
-
-        db: Session = next(get_db())
         try:
-            # Get portfolio
             portfolio_db = (
                 db.query(UserPortfolio)
                 .filter_by(user_id=user_id, name=portfolio_name)
@@ -983,7 +1119,6 @@ def remove_portfolio_position(
                     "status": "error",
                 }
 
-            # Get position
             position_db = (
                 db.query(PortfolioPosition)
                 .filter_by(portfolio_id=portfolio_db.id, ticker=ticker.upper())
@@ -996,40 +1131,50 @@ def remove_portfolio_position(
                     "status": "error",
                 }
 
-            # Remove entire position or partial shares
-            if shares is None or shares >= float(position_db.shares):
-                # Remove entire position
-                removed_shares = float(position_db.shares)
-                db.delete(position_db)
-                db.commit()
+            sell_shares = float(position_db.shares) if shares is None else shares
+            fully_closed = sell_shares >= float(position_db.shares)
 
+            ledger = PortfolioLedgerService(db)
+            ledger.record_trade(
+                user_id=user_id,
+                portfolio_name=portfolio_name,
+                payload=RecordTradeInput(
+                    ticker=ticker,
+                    side="SELL",
+                    quantity=Decimal(str(min(sell_shares, float(position_db.shares)))),
+                    price=position_db.average_cost_basis,
+                    fee=Decimal("0"),
+                    trade_time=datetime.now(UTC),
+                    lot_method="AVG",
+                ),
+            )
+            db.commit()
+
+            if fully_closed:
                 return {
                     "status": "success",
-                    "message": f"Removed entire position of {removed_shares} shares of {ticker.upper()}",
-                    "removed_shares": removed_shares,
+                    "message": f"Removed entire position of {sell_shares} shares of {ticker.upper()}",
+                    "removed_shares": sell_shares,
                     "position_fully_closed": True,
                 }
-            else:
-                # Remove partial shares
-                new_shares = position_db.shares - Decimal(str(shares))
-                new_total_cost = new_shares * position_db.average_cost_basis
 
-                position_db.shares = new_shares
-                position_db.total_cost = new_total_cost
-                db.commit()
-
-                return {
-                    "status": "success",
-                    "message": f"Removed {shares} shares of {ticker.upper()}",
-                    "removed_shares": shares,
-                    "position_fully_closed": False,
-                    "remaining_position": {
-                        "ticker": position_db.ticker,
-                        "shares": float(position_db.shares),
-                        "average_cost_basis": float(position_db.average_cost_basis),
-                        "total_cost": float(position_db.total_cost),
-                    },
-                }
+            updated_position = (
+                db.query(PortfolioPosition)
+                .filter_by(portfolio_id=portfolio_db.id, ticker=ticker.upper())
+                .first()
+            )
+            return {
+                "status": "success",
+                "message": f"Removed {sell_shares} shares of {ticker.upper()}",
+                "removed_shares": sell_shares,
+                "position_fully_closed": False,
+                "remaining_position": {
+                    "ticker": updated_position.ticker,
+                    "shares": float(updated_position.shares),
+                    "average_cost_basis": float(updated_position.average_cost_basis),
+                    "total_cost": float(updated_position.total_cost),
+                },
+            }
 
         finally:
             db.close()
@@ -1117,4 +1262,139 @@ def clear_my_portfolio(
 
     except Exception as e:
         logger.error(f"Error clearing portfolio: {str(e)}")
+        return {"error": str(e), "status": "error"}
+
+
+def portfolio_record_trade(
+    ticker: str,
+    side: str,
+    quantity: float,
+    price: float,
+    trade_time: str | None = None,
+    fee: float = 0.0,
+    lot_method: str = "FIFO",
+    notes: str | None = None,
+    user_id: str = "default",
+    portfolio_name: str = "My Portfolio",
+) -> dict[str, Any]:
+    """Record a portfolio trade to the transaction ledger."""
+    try:
+        is_valid, error_msg = _validate_ticker(ticker)
+        if not is_valid:
+            return {"error": error_msg, "status": "error"}
+
+        side = side.upper().strip()
+        if side not in {"BUY", "SELL"}:
+            return {"error": "side must be BUY or SELL", "status": "error"}
+        if quantity <= 0:
+            return {"error": "quantity must be > 0", "status": "error"}
+        if price <= 0:
+            return {"error": "price must be > 0", "status": "error"}
+        if fee < 0:
+            return {"error": "fee must be >= 0", "status": "error"}
+
+        lot_method = lot_method.upper().strip()
+        if lot_method not in {"FIFO", "LIFO", "AVG"}:
+            return {"error": "lot_method must be FIFO, LIFO, or AVG", "status": "error"}
+
+        parsed_trade_time = datetime.now(UTC)
+        if trade_time:
+            try:
+                parsed_trade_time = datetime.fromisoformat(trade_time.replace("Z", "+00:00"))
+                if parsed_trade_time.tzinfo is None:
+                    parsed_trade_time = parsed_trade_time.replace(tzinfo=UTC)
+            except ValueError:
+                return {"error": "Invalid trade_time format. Use ISO-8601", "status": "error"}
+
+        db: Session = next(get_db())
+        try:
+            portfolio_db = (
+                db.query(UserPortfolio)
+                .filter_by(user_id=user_id, name=portfolio_name)
+                .first()
+            )
+            if not portfolio_db:
+                portfolio_db = UserPortfolio(user_id=user_id, name=portfolio_name)
+                db.add(portfolio_db)
+                db.flush()
+
+            from maverick_mcp.data.models import PortfolioTransaction
+
+            txn = PortfolioTransaction(
+                portfolio_id=portfolio_db.id,
+                ticker=_normalize_ticker(ticker),
+                side=side,
+                quantity=Decimal(str(quantity)),
+                price=Decimal(str(price)),
+                fee=Decimal(str(fee)),
+                trade_time=parsed_trade_time,
+                lot_method=lot_method,
+                notes=notes,
+            )
+            db.add(txn)
+
+            # Keep legacy position table in sync for backward compatibility
+            existing_position = (
+                db.query(PortfolioPosition)
+                .filter_by(portfolio_id=portfolio_db.id, ticker=_normalize_ticker(ticker))
+                .first()
+            )
+
+            if side == "BUY":
+                total_cost = Decimal(str(quantity)) * Decimal(str(price)) + Decimal(str(fee))
+                if existing_position:
+                    old_total = existing_position.shares * existing_position.average_cost_basis
+                    new_total = old_total + total_cost
+                    new_shares = existing_position.shares + Decimal(str(quantity))
+                    existing_position.shares = new_shares
+                    existing_position.average_cost_basis = new_total / new_shares
+                    existing_position.total_cost = new_total
+                    existing_position.purchase_date = parsed_trade_time
+                else:
+                    db.add(
+                        PortfolioPosition(
+                            portfolio_id=portfolio_db.id,
+                            ticker=_normalize_ticker(ticker),
+                            shares=Decimal(str(quantity)),
+                            average_cost_basis=Decimal(str(price)),
+                            total_cost=total_cost,
+                            purchase_date=parsed_trade_time,
+                            notes=notes,
+                        )
+                    )
+            else:
+                if not existing_position:
+                    return {"error": f"No existing position for {_normalize_ticker(ticker)}", "status": "error"}
+                if Decimal(str(quantity)) > existing_position.shares:
+                    return {"error": "Cannot sell more shares than currently held", "status": "error"}
+
+                remaining_shares = existing_position.shares - Decimal(str(quantity))
+                if remaining_shares == 0:
+                    db.delete(existing_position)
+                else:
+                    existing_position.shares = remaining_shares
+                    existing_position.total_cost = remaining_shares * existing_position.average_cost_basis
+
+            db.commit()
+            return {
+                "status": "success",
+                "transaction": {
+                    "ticker": _normalize_ticker(ticker),
+                    "side": side,
+                    "quantity": quantity,
+                    "price": price,
+                    "fee": fee,
+                    "trade_time": parsed_trade_time.isoformat(),
+                    "lot_method": lot_method,
+                },
+                "portfolio": {
+                    "name": portfolio_db.name,
+                    "user_id": portfolio_db.user_id,
+                },
+            }
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"Error recording trade for {ticker}: {str(e)}")
         return {"error": str(e), "status": "error"}

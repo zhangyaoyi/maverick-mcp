@@ -60,13 +60,19 @@ def get_primary_key_type():
 # Database connection setup
 # Try multiple possible environment variable names
 # Use SQLite in-memory for GitHub Actions or test environments
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
 if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("CI") == "true":
     DATABASE_URL = "sqlite:///:memory:"
 else:
     DATABASE_URL = (
         os.getenv("DATABASE_URL")
         or os.getenv("POSTGRES_URL")
-        or "sqlite:///maverick_mcp.db"  # Default to SQLite
+        or (
+            "sqlite:///maverick_mcp_dev.db"
+            if ENVIRONMENT == "development"
+            else "sqlite:///maverick_mcp.db"
+        )
     )
 
 # Database configuration from settings
@@ -1726,6 +1732,82 @@ def bulk_insert_screening_data(
 # ============================================================================
 
 
+class PortfolioTransaction(TimestampMixin, Base):
+    """Trade ledger entries for portfolio positions."""
+
+    __tablename__ = "mcp_portfolio_transactions"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    portfolio_id = Column(
+        Uuid, ForeignKey("mcp_portfolios.id", ondelete="CASCADE"), nullable=False
+    )
+    ticker = Column(String(20), nullable=False, index=True)
+    side = Column(String(10), nullable=False)  # BUY | SELL
+    quantity = Column(Numeric(20, 8), nullable=False)
+    price = Column(Numeric(12, 4), nullable=False)
+    fee = Column(Numeric(20, 4), nullable=False, default=Decimal("0"))
+    trade_time = Column(DateTime(timezone=True), nullable=False)
+    lot_method = Column(String(10), nullable=False, default="FIFO")
+    notes = Column(Text, nullable=True)
+
+    portfolio = relationship("UserPortfolio", back_populates="transactions")
+
+    __table_args__ = (
+        Index("idx_portfolio_transactions_portfolio_time", "portfolio_id", "trade_time"),
+        Index("idx_portfolio_transactions_portfolio_ticker", "portfolio_id", "ticker"),
+    )
+
+
+class PortfolioCashTransaction(TimestampMixin, Base):
+    """Cash-flow ledger entries for portfolio-level accounting."""
+
+    __tablename__ = "mcp_portfolio_cash_transactions"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    portfolio_id = Column(
+        Uuid, ForeignKey("mcp_portfolios.id", ondelete="CASCADE"), nullable=False
+    )
+    type = Column(String(20), nullable=False)  # DEPOSIT | WITHDRAW | DIVIDEND | FEE | INTEREST
+    amount = Column(Numeric(20, 4), nullable=False)
+    event_time = Column(DateTime(timezone=True), nullable=False)
+    currency = Column(String(8), nullable=False, default="USD")
+    notes = Column(Text, nullable=True)
+
+    portfolio = relationship("UserPortfolio", back_populates="cash_transactions")
+
+    __table_args__ = (
+        Index("idx_portfolio_cash_transactions_portfolio_time", "portfolio_id", "event_time"),
+    )
+
+
+class PortfolioValuationSnapshot(Base):
+    """Periodic portfolio valuation snapshots for fast reads and charting."""
+
+    __tablename__ = "mcp_portfolio_valuation_snapshots"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    portfolio_id = Column(
+        Uuid, ForeignKey("mcp_portfolios.id", ondelete="CASCADE"), nullable=False
+    )
+    as_of = Column(DateTime(timezone=True), nullable=False)
+    invested = Column(Numeric(20, 4), nullable=False)
+    market_value = Column(Numeric(20, 4), nullable=False)
+    cash_value = Column(Numeric(20, 4), nullable=False)
+    total_equity = Column(Numeric(20, 4), nullable=False)
+    unrealized_pnl = Column(Numeric(20, 4), nullable=False)
+    realized_pnl = Column(Numeric(20, 4), nullable=False)
+    currency = Column(String(8), nullable=False, default="USD")
+    meta = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+
+    portfolio = relationship("UserPortfolio", back_populates="valuation_snapshots")
+
+    __table_args__ = (
+        Index("idx_portfolio_valuation_snapshots_portfolio_asof", "portfolio_id", "as_of"),
+        UniqueConstraint("portfolio_id", "as_of", name="uq_portfolio_valuation_snapshot_portfolio_asof"),
+    )
+
+
 class UserPortfolio(TimestampMixin, Base):
     """
     User portfolio for tracking investment holdings.
@@ -1752,6 +1834,24 @@ class UserPortfolio(TimestampMixin, Base):
         back_populates="portfolio",
         cascade="all, delete-orphan",
         lazy="selectin",  # Efficient loading
+    )
+    transactions = relationship(
+        "PortfolioTransaction",
+        back_populates="portfolio",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    cash_transactions = relationship(
+        "PortfolioCashTransaction",
+        back_populates="portfolio",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    valuation_snapshots = relationship(
+        "PortfolioValuationSnapshot",
+        back_populates="portfolio",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     # Indexes for queries

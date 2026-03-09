@@ -57,7 +57,7 @@ class ConfigurationFactory:
                     "DATABASE_URL": "sqlite:///:memory:",
                     "REDIS_HOST": "localhost",
                     "REDIS_PORT": "6379",
-                    "REDIS_DB": "1",  # Use different DB for tests
+                    "REDIS_DB": "2",  # Use DB 2 for tests (0=prod, 1=dev, 2=test)
                     "CACHE_ENABLED": "false",  # Disable cache in tests by default
                     "LOG_LEVEL": "DEBUG",
                     "ENVIRONMENT": "test",

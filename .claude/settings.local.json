@@ -1,6 +1,8 @@
 {
   "permissions": {
     "allow": [
+      "Bash(find /Users/overman/projects/maverick-mcp/*)",
+      "Bash(find *)",
       "Bash(git *)",
       "Bash(gh *)",
       "Bash(python *)",

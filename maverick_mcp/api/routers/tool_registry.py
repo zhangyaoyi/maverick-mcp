@@ -100,6 +100,7 @@ def register_portfolio_tools(mcp: FastMCP) -> None:
         compare_tickers,
         get_my_portfolio,
         portfolio_correlation_analysis,
+        portfolio_record_trade,
         remove_portfolio_position,
         risk_adjusted_analysis,
     )
@@ -108,6 +109,7 @@ def register_portfolio_tools(mcp: FastMCP) -> None:
     mcp.tool(name="portfolio_add_position")(add_portfolio_position)
     mcp.tool(name="portfolio_get_my_portfolio")(get_my_portfolio)
     mcp.tool(name="portfolio_remove_position")(remove_portfolio_position)
+    mcp.tool(name="portfolio_record_trade")(portfolio_record_trade)
     mcp.tool(name="portfolio_clear_portfolio")(clear_my_portfolio)
 
     # Portfolio analysis tools

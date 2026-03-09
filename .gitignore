@@ -41,7 +41,10 @@ pyright_analysis.txt
 
 # Virtual environments
 .env
+.env.dev
+.env.test
 .env.prod
+.env.development
 .env.local
 .venv
 env/

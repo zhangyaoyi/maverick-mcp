@@ -109,7 +109,7 @@ def db_session(engine) -> Generator[Session, None, None]:
 
 
 # Environment setup
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session", autouse=False)
 def setup_test_env(database_url: str, redis_url: str):
     """Set up test environment variables."""
     os.environ["DATABASE_URL"] = database_url

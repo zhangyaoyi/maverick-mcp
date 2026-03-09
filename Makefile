@@ -1,7 +1,7 @@
 # Maverick-MCP Makefile
 # Central command interface for agent-friendly development
 
-.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies lint format typecheck clean tail-log backend check migrate setup redis-start redis-stop experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs docker-infra-up docker-infra-down
+.PHONY: help dev dev-sse dev-http dev-stdio stop test test-all test-watch test-specific test-parallel test-cov test-speed test-speed-quick test-speed-emergency test-speed-comparison test-strategies test-portfolio-ledger lint format typecheck clean tail-log backend check migrate migrate-dev migrate-test migrate-prod migrate-all setup create-dev-db create-dbs redis-start redis-stop experiment experiment-once benchmark-parallel benchmark-speed docker-up docker-down docker-logs docker-infra-up docker-infra-down infra-up infra-down infra-reset
 
 # Default target
 help:
@@ -38,9 +38,18 @@ help:
 	@echo "  make benchmark-parallel - Test parallel screening"
 	@echo "  make benchmark-speed - Run comprehensive speed benchmark"
 	@echo "  make migrate      - Run database migrations"
+	@echo "  make migrate-dev  - Run migrations on dev database (uses .env.development)"
+	@echo "  make create-dev-db - Create maverick_mcp_dev database in Docker PostgreSQL"
 	@echo "  make setup        - Initial project setup"
 	@echo "  make clean        - Clean up generated files"
 	@echo ""
+	@echo "  make infra-up     - Start infrastructure (Postgres + Redis) with --env-file .env"
+	@echo "  make infra-down   - Stop infrastructure"
+	@echo "  make infra-reset  - Wipe volumes and restart infrastructure"
+	@echo "  make migrate-dev  - Run migrations on maverick_mcp_dev"
+	@echo "  make migrate-test - Run migrations on maverick_mcp_test"
+	@echo "  make migrate-prod - Run migrations on maverick_mcp (with confirmation)"
+	@echo "  make migrate-all  - Run migrations on all three databases"
 	@echo "  make docker-infra-up  - Start infrastructure (Postgres + Redis)"
 	@echo "  make docker-infra-down - Stop infrastructure"
 	@echo "  make docker-up    - Start app (requires infra running)"
@@ -50,11 +59,11 @@ help:
 # Development commands
 dev:
 	@echo "Starting Maverick-MCP development environment (SSE transport)..."
-	@./scripts/dev.sh
+	@set -a; [ -f .env ] && . ./.env; [ -f .env.dev ] && . ./.env.dev; set +a; ./scripts/dev.sh
 
 dev-sse:
 	@echo "Starting Maverick-MCP development environment (SSE transport)..."
-	@./scripts/dev.sh
+	@set -a; [ -f .env ] && . ./.env; [ -f .env.dev ] && . ./.env.dev; set +a; ./scripts/dev.sh
 
 dev-http:
 	@echo "Starting Maverick-MCP development environment (Streamable-HTTP transport)..."
@@ -97,6 +106,10 @@ test-specific:
 	fi
 	@echo "Running specific test: $(TEST)"
 	@uv run pytest -v -k "$(TEST)"
+
+test-portfolio-ledger:
+	@echo "Running portfolio ledger focused local tests (no Docker required)..."
+	@uv run pytest -v maverick_mcp/tests/test_portfolio_ledger_local.py
 
 test-parallel:
 	@echo "Running tests in parallel..."
@@ -173,6 +186,29 @@ migrate:
 	@echo "Running database migrations..."
 	@./scripts/run-migrations.sh upgrade
 
+create-dev-db:
+	@echo "Creating development database maverick_mcp_dev..."
+	@docker exec $$(docker ps -qf "name=postgres") \
+		psql -U $${POSTGRES_USER:-postgres} \
+		-c "CREATE DATABASE maverick_mcp_dev;" 2>/dev/null || \
+		echo "Database may already exist or Docker container not found"
+
+migrate-dev:
+	@echo "Running migrations on dev database (maverick_mcp_dev)..."
+	@set -a; [ -f .env ] && . ./.env; [ -f .env.dev ] && . ./.env.dev; set +a; uv run alembic upgrade head
+
+migrate-test:
+	@echo "Running migrations on test database (maverick_mcp_test)..."
+	@set -a; [ -f .env ] && . ./.env; [ -f .env.test ] && . ./.env.test; set +a; uv run alembic upgrade head
+
+migrate-prod:
+	@echo "Running migrations on production database (maverick_mcp)..."
+	@read -p "Confirm production migration? [y/N] " ans && [ "$$ans" = "y" ] || exit 1
+	@set -a; [ -f .env ] && . ./.env; [ -f .env.prod ] && . ./.env.prod; set +a; uv run alembic upgrade head
+
+migrate-all: migrate-dev migrate-test migrate-prod
+	@echo "All database migrations complete."
+
 setup:
 	@echo "Setting up Maverick-MCP..."
 	@if [ ! -f .env ]; then \
@@ -227,6 +263,32 @@ benchmark-speed:
 	@echo "Running comprehensive speed benchmark..."
 	@uv run python scripts/speed_benchmark.py --mode full
 
+
+# Infrastructure commands (with --env-file .env for credentials)
+create-dbs:
+	@echo "Creating databases (idempotent — safe to re-run)..."
+	@for i in $$(seq 1 30); do \
+		docker exec maverick-infra-postgres-1 pg_isready 2>/dev/null && break; \
+		echo "Waiting for Postgres... ($$i/30)"; sleep 1; \
+	done
+	@docker exec maverick-infra-postgres-1 \
+		bash /docker-entrypoint-initdb.d/init-db.sh
+	@echo "Databases ready: maverick_mcp, maverick_mcp_dev, maverick_mcp_test"
+
+infra-up:
+	@echo "Starting infrastructure (Postgres + Redis)..."
+	@docker compose --env-file .env -f docker-compose.infra.yml up -d
+	@$(MAKE) --no-print-directory create-dbs
+
+infra-down:
+	@echo "Stopping infrastructure..."
+	@docker compose --env-file .env -f docker-compose.infra.yml down
+
+infra-reset:
+	@echo "Resetting infrastructure (wipes volumes)..."
+	@docker compose --env-file .env -f docker-compose.infra.yml down -v
+	@docker compose --env-file .env -f docker-compose.infra.yml up -d
+	@$(MAKE) --no-print-directory create-dbs
 
 # Docker commands
 docker-infra-up:
